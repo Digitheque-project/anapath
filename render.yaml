@@ -1,0 +1,39 @@
+services:
+  # Backend NestJS
+  - type: web
+    name: anapath-backend
+    runtime: node
+    plan: free
+    rootDir: back_anapath
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: DB_HOST
+        fromDatabase:
+          name: anapath-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: anapath-db
+          property: port
+      - key: DB_USER
+        fromDatabase:
+          name: anapath-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: anapath-db
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: anapath-db
+          property: database
+
+  # Base de données PostgreSQL (Render propose MySQL aussi)
+  - type: pserv
+    name: anapath-db
+    plan: free

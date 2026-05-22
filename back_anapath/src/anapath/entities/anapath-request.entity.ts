@@ -23,12 +23,12 @@ export class AnapathRequest {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Index({ unique: true })
-  @Column()
+  @Column({ unique: true })
+  @Index()
   anapathId: string;
 
-  @Index()
   @Column()
+  @Index()
   patientId: string;
 
   @Column({ nullable: true })
@@ -49,10 +49,10 @@ export class AnapathRequest {
   @Column({ type: 'timestamp', nullable: true })
   extemporaneAlertSentAt: Date;
 
-  @Column({ type: 'json', nullable: true })
+  @Column({ type: 'jsonb', nullable: true })
   prelevement: object;
 
-  @Column({ type: 'json', nullable: true })
+  @Column({ type: 'jsonb', nullable: true })
   resultat: object;
 
   @Column({ type: 'enum', enum: Statut, default: Statut.CREEE })
