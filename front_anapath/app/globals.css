@@ -1,0 +1,147 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+@layer base {
+  :root {
+    --primary: #00478d;
+    --primary-container: #005eb8;
+    --surface: #f9f9ff;
+    --surface-container-lowest: #ffffff;
+    --surface-container-low: #f2f3fb;
+    --surface-container: #ecedf6;
+    --surface-container-high: #e7e8f0;
+    --surface-container-highest: #e1e2ea;
+    --on-surface: #191c21;
+    --on-surface-variant: #424752;
+    --outline-variant: #c2c6d4;
+    --tertiary: #950000;
+    --tertiary-container: #c20000;
+    --secondary: #4a5f83;
+    --secondary-container: #c0d5ff;
+    --error: #ba1a1a;
+    --error-container: #ffdad6;
+    --primary-fixed: #d6e3ff;
+    --secondary-fixed: #d6e3ff;
+    --tertiary-fixed: #ffdad4;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--surface);
+    color: var(--on-surface);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Manrope', sans-serif;
+  }
+
+  /* Custom scrollbar - Clinical Sanctuary style */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--outline-variant);
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--on-surface-variant);
+  }
+}
+
+/* Material Symbols - Google Fonts */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Grain overlay for "The Clinical Sanctuary" texture */
+.grain-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.02;
+  z-index: 9999;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+/* Pulse animation for STAT alerts */
+@keyframes stat-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(186, 26, 26, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(186, 26, 26, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(186, 26, 26, 0);
+  }
+}
+
+.stat-pulse {
+  animation: stat-pulse 2s infinite;
+}
+
+/* Glassmorphism utility - for headers and floating elements */
+.glass-effect {
+  background: rgba(249, 249, 255, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Gradient primary buttons */
+.btn-primary-gradient {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-container) 100%);
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.btn-primary-gradient:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-primary-gradient:active {
+  transform: translateY(0);
+}
+
+/* No-line rule - borders only via background contrast */
+.card-elevated {
+  background: var(--surface-container-lowest);
+  border-radius: 0.75rem;
+}
+
+.card-flat {
+  background: var(--surface-container-low);
+  border-radius: 0.75rem;
+}
+
+.card-subtle {
+  background: var(--surface-container);
+  border-radius: 0.75rem;
+}

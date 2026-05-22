@@ -1,0 +1,16 @@
+{
+  "name": "Anapath System",
+  "short_name": "Anapath",
+  "description": "Système d'information hospitalier - Anatomie pathologique",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#00478d",
+  "background_color": "#f9f9ff",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

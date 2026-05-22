@@ -1,0 +1,30 @@
+import { IsEnum, IsString, IsOptional, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { Statut } from '../entities/anapath-request.entity';
+
+class ResultatDto {
+  @IsString()
+  conclusion: string;
+
+  @IsString()
+  details: string;
+
+  @IsOptional()
+  @IsString({ each: true })
+  imageUrls?: string[];
+}
+
+export class UpdateAnapathDto {
+  @IsOptional()
+  @IsEnum(Statut)
+  statut?: Statut;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ResultatDto)
+  resultat?: ResultatDto;
+
+  @IsOptional()
+  @IsString()
+  motifAnnulation?: string;
+}
