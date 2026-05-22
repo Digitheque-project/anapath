@@ -6,7 +6,7 @@ services:
     plan: free
     rootDir: back_anapath
     buildCommand: npm install && npm run build
-    startCommand: npm run start:prod
+    startCommand: node dist/main
     envVars:
       - key: NODE_ENV
         value: production
@@ -33,7 +33,8 @@ services:
           name: anapath-db
           property: database
 
-  # Base de données PostgreSQL (Render propose MySQL aussi)
-  - type: pserv
-    name: anapath-db
+databases:
+  - name: anapath-db
     plan: free
+    databaseName: anapath_db
+    user: anapath_user
