@@ -4,5 +4,10 @@
   "scripts": {
     "build": "cd front_anapath && npm install && npm run build",
     "dev": "cd front_anapath && npm run dev"
+  },
+  "dependencies": {
+    "next": "15.5.8",
+    "react": "19.1.2",
+    "react-dom": "19.1.2"
   }
 }
