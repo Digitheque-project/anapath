@@ -18,7 +18,6 @@
     --tertiary: #950000;
     --tertiary-container: #c20000;
     --secondary: #4a5f83;
-    --secondary-container: #c0d5ff;
     --error: #ba1a1a;
     --error-container: #ffdad6;
     --primary-fixed: #d6e3ff;
@@ -42,7 +41,7 @@
     font-family: 'Manrope', sans-serif;
   }
 
-  /* Custom scrollbar - Clinical Sanctuary style */
+  /* Custom scrollbar */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -59,7 +58,7 @@
   }
 }
 
-/* Material Symbols - Google Fonts */
+/* Material Symbols */
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined';
   font-weight: normal;
@@ -107,7 +106,7 @@
   animation: stat-pulse 2s infinite;
 }
 
-/* Glassmorphism utility - for headers and floating elements */
+/* Glassmorphism utility */
 .glass-effect {
   background: rgba(249, 249, 255, 0.8);
   backdrop-filter: blur(20px);
@@ -130,7 +129,7 @@
   transform: translateY(0);
 }
 
-/* No-line rule - borders only via background contrast */
+/* No-line rule */
 .card-elevated {
   background: var(--surface-container-lowest);
   border-radius: 0.75rem;

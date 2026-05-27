@@ -27,6 +27,7 @@ export default function RootLayout({
   return (
     <html lang="fr" className="light">
       <head>
+        <meta charSet="UTF-8" />
         <link 
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" 
           rel="stylesheet"

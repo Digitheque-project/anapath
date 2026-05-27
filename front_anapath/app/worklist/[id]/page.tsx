@@ -40,7 +40,6 @@ export default function WorklistDetailPage() {
   const [request, setRequest] = useState<AnapathRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
-  const [showAlert, setShowAlert] = useState(false);
   const [resultData, setResultData] = useState({
     conclusion: '',
     details: ''
@@ -70,21 +69,6 @@ export default function WorklistDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleTimeOut = () => {
-    setShowAlert(true);
-    alert('⏰ DÉLAI STAT DÉPASSÉ ! Veuillez traiter cette demande en urgence.');
-  };
-
-  const handleTimerAlert = () => {
-    // Alerte visuelle et sonore
-    setShowAlert(true);
-    // Option: jouer un son
-    try {
-      const audio = new Audio('/alert.mp3');
-      audio.play().catch(e => console.log('Audio non supporté'));
-    } catch (e) {}
   };
 
   const handleSaveResult = async () => {
@@ -184,13 +168,16 @@ export default function WorklistDetailPage() {
 
         <div className="flex-1 p-6 w-full max-w-5xl mx-auto">
           
-          {/* Minuteur Extemporané STAT */}
+          {/* Minuteur Extemporané STAT - Placé APRÈS avoir vérifié que request existe */}
           {request.isExtemporane && request.statut !== 'VALIDE' && (
             <div className="mb-6">
               <ExtemporaneTimer 
                 startTime={request.createdAt}
-                onTimeOut={handleTimeOut}
-                onAlert={handleTimerAlert}
+                requestId={request.id}
+                anapathId={request.anapathId}
+                patientId={request.patientId}
+                onTimeOut={() => console.log('Temps écoulé')}
+                onAlert={() => console.log('Alerte 5 min')}
               />
             </div>
           )}

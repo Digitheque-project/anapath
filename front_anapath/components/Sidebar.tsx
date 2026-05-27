@@ -17,8 +17,8 @@ export default function Sidebar() {
   return (
     <aside className="h-screen w-64 flex flex-col fixed left-0 top-0 bg-slate-50 py-6 z-40">
       <div className="px-6 mb-8">
-        <h1 className="text-xl font-bold tracking-tight text-blue-900">Anapath Service</h1>
-        <p className="text-[11px] tracking-wider uppercase text-slate-500 font-medium">Clinical Sanctuary</p>
+        <h1 className="text-xl font-bold tracking-tight text-blue-900">Service Anapath</h1>
+        <p className="text-[11px] tracking-wider uppercase text-slate-500 font-medium">Sanctuaire Clinique</p>
       </div>
 
       <nav className="flex-1 space-y-1 px-4">
@@ -45,16 +45,6 @@ export default function Sidebar() {
             Nouvel examen
           </button>
         </Link>
-
-        <div className="mt-6 flex items-center gap-3 px-4 py-3 bg-[#f2f3fb] rounded-xl">
-          <div className="w-10 h-10 rounded-full bg-[#00478d]/10 flex items-center justify-center">
-            <span className="material-symbols-outlined text-[#00478d]">person</span>
-          </div>
-          <div className="overflow-hidden">
-            <p className="text-xs font-bold text-[#191c21] truncate">Dr. Aris Thorne</p>
-            <p className="text-[10px] text-[#424752]">Pathologiste senior</p>
-          </div>
-        </div>
       </div>
     </aside>
   );

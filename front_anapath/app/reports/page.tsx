@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
+import TopBar from '@/components/TopBar';
 import axios from 'axios';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface AnapathRequest {
   id: string;
@@ -26,12 +29,7 @@ interface Statistics {
 export default function ReportsPage() {
   const [requests, setRequests] = useState<AnapathRequest[]>([]);
   const [stats, setStats] = useState<Statistics>({
-    total: 0,
-    byType: {},
-    byStatus: {},
-    monthlyData: [],
-    topDiagnostics: [],
-    tatMoyen: 0
+    total: 0, byType: {}, byStatus: {}, monthlyData: [], topDiagnostics: [], tatMoyen: 0
   });
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
@@ -55,35 +53,25 @@ export default function ReportsPage() {
   };
 
   const calculateStatistics = (data: AnapathRequest[]) => {
-    // Total
     const total = data.length;
-
-    // Par type d'examen
     const byType: Record<string, number> = {};
-    data.forEach(req => {
-      byType[req.typeExamen] = (byType[req.typeExamen] || 0) + 1;
-    });
-
-    // Par statut
     const byStatus: Record<string, number> = {};
     data.forEach(req => {
+      byType[req.typeExamen] = (byType[req.typeExamen] || 0) + 1;
       byStatus[req.statut] = (byStatus[req.statut] || 0) + 1;
     });
 
-    // TAT moyen (temps entre création et validation)
     const validatedRequests = data.filter(req => req.validatedAt && req.statut === 'VALIDE');
     let tatMoyen = 0;
     if (validatedRequests.length > 0) {
       const totalDays = validatedRequests.reduce((sum, req) => {
         const created = new Date(req.createdAt);
         const validated = new Date(req.validatedAt!);
-        const days = (validated.getTime() - created.getTime()) / (1000 * 3600 * 24);
-        return sum + days;
+        return sum + (validated.getTime() - created.getTime()) / (1000 * 3600 * 24);
       }, 0);
       tatMoyen = totalDays / validatedRequests.length;
     }
 
-    // Données mensuelles (sur les 6 derniers mois)
     const monthlyData: { month: string; count: number }[] = [];
     const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
     const currentDate = new Date();
@@ -97,7 +85,6 @@ export default function ReportsPage() {
       monthlyData.push({ month: monthName, count });
     }
 
-    // Top diagnostics (simulé car pas de CIM-10 dans les données)
     const topDiagnostics = [
       { code: 'C50.9', name: 'Tumeur maligne du sein', count: Math.floor(Math.random() * 50) + 10 },
       { code: 'K29.7', name: 'Gastrite', count: Math.floor(Math.random() * 40) + 5 },
@@ -109,12 +96,44 @@ export default function ReportsPage() {
     setStats({ total, byType, byStatus, monthlyData, topDiagnostics, tatMoyen });
   };
 
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    const date = new Date().toLocaleDateString('fr-FR');
+    doc.setFontSize(18);
+    doc.setTextColor(0, 71, 141);
+    doc.text('Rapport Anapath - Statistiques', 14, 20);
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Généré le ${date}`, 14, 28);
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Total examens: ${stats.total}`, 14, 45);
+    doc.text(`En attente: ${stats.byStatus['CREEE'] || 0}`, 14, 53);
+    doc.text(`Validés: ${stats.byStatus['VALIDE'] || 0}`, 14, 61);
+    doc.text(`Délai moyen TAT: ${stats.tatMoyen.toFixed(1)} jours`, 14, 69);
+    doc.setFontSize(14);
+    doc.setTextColor(0, 71, 141);
+    doc.text('Liste des demandes', 14, 85);
+    
+    const tableData = requests.map(req => [
+      req.anapathId, req.patientId, req.typeExamen, req.statut,
+      new Date(req.createdAt).toLocaleDateString('fr-FR')
+    ]);
+    
+    autoTable(doc, {
+      startY: 90,
+      head: [['ID PARA', 'Patient', 'Type examen', 'Statut', 'Date']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: { fillColor: [0, 71, 141], textColor: [255, 255, 255] },
+      margin: { left: 14, right: 14 },
+    });
+    doc.save(`rapport-anapath-${date}.pdf`);
+  };
+
   const getFilteredData = () => {
-    if (period === 'month') {
-      return stats.monthlyData.slice(-1);
-    } else if (period === 'quarter') {
-      return stats.monthlyData.slice(-3);
-    }
+    if (period === 'month') return stats.monthlyData.slice(-1);
+    if (period === 'quarter') return stats.monthlyData.slice(-3);
     return stats.monthlyData;
   };
 
@@ -135,64 +154,38 @@ export default function ReportsPage() {
     <div className="flex min-h-screen bg-[#f9f9ff] text-[#191c21]">
       <div className="fixed inset-0 grain-overlay z-[60] pointer-events-none"></div>
       <Sidebar />
-
+      
       <main className="flex-1 ml-64 min-h-screen flex flex-col w-[calc(100%-256px)]">
+        <TopBar />
         
-        <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl flex justify-between items-center px-6 py-3 shadow-sm">
-          <div className="flex items-center gap-4">
-            <h2 className="text-lg font-black text-blue-900 tracking-tight">Rapports & statistiques</h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#00478d]/10 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[#00478d] text-sm">person</span>
-            </div>
-          </div>
-        </header>
-
         <div className="flex-1 p-6 w-full">
-          <div className="mb-6">
-            <h2 className="text-2xl font-extrabold text-[#191c21] tracking-tight">Analyse de performance</h2>
-            <p className="text-slate-500 text-sm mt-1">Statistiques et indicateurs clés</p>
-          </div>
+          <div className="mb-6"><h2 className="text-2xl font-extrabold text-[#191c21] tracking-tight">Analyse de performance</h2><p className="text-slate-500 text-sm mt-1">Statistiques et indicateurs clés</p></div>
 
-          {/* Sélecteur de période */}
           <div className="flex gap-2 bg-[#ecedf6] p-1 rounded-lg w-fit mb-6">
             <button onClick={() => setPeriod('month')} className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${period === 'month' ? 'bg-white shadow-sm text-primary' : 'text-slate-500'}`}>Mois</button>
             <button onClick={() => setPeriod('quarter')} className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${period === 'quarter' ? 'bg-white shadow-sm text-primary' : 'text-slate-500'}`}>Trimestre</button>
             <button onClick={() => setPeriod('year')} className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all ${period === 'year' ? 'bg-white shadow-sm text-primary' : 'text-slate-500'}`}>Année</button>
           </div>
 
-          {/* 4 KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
             <div className="bg-white p-5 rounded-xl shadow-sm border border-outline-variant/20">
-              <div className="flex justify-between items-start mb-2">
-                <span className="material-symbols-outlined text-primary text-2xl">analytics</span>
-                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">+{Math.floor(Math.random() * 20)}%</span>
-              </div>
-              <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Total examens</p>
-              <p className="text-3xl font-extrabold text-primary">{stats.total}</p>
+              <div className="flex justify-between items-start mb-2"><span className="material-symbols-outlined text-primary text-2xl">analytics</span><span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">+{Math.floor(Math.random() * 20)}%</span></div>
+              <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Total examens</p><p className="text-3xl font-extrabold text-primary">{stats.total}</p>
             </div>
             <div className="bg-white p-5 rounded-xl shadow-sm border border-outline-variant/20">
-              <div className="flex justify-between items-start mb-2">
-                <span className="material-symbols-outlined text-tertiary text-2xl">speed</span>
-                <span className="text-xs font-bold text-tertiary bg-tertiary/10 px-2 py-0.5 rounded-full">STAT</span>
-              </div>
-              <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">En attente</p>
-              <p className="text-3xl font-extrabold text-tertiary">{stats.byStatus['CREEE'] || 0}</p>
+              <div className="flex justify-between items-start mb-2"><span className="material-symbols-outlined text-tertiary text-2xl">speed</span><span className="text-xs font-bold text-tertiary bg-tertiary/10 px-2 py-0.5 rounded-full">STAT</span></div>
+              <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">En attente</p><p className="text-3xl font-extrabold text-tertiary">{stats.byStatus['CREEE'] || 0}</p>
             </div>
             <div className="bg-white p-5 rounded-xl shadow-sm border border-outline-variant/20">
               <span className="material-symbols-outlined text-primary text-2xl mb-2">schedule</span>
-              <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Délai moyen TAT</p>
-              <p className="text-3xl font-extrabold text-primary">{stats.tatMoyen.toFixed(1)} <span className="text-base font-normal">jours</span></p>
+              <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Délai moyen TAT</p><p className="text-3xl font-extrabold text-primary">{stats.tatMoyen.toFixed(1)} <span className="text-base font-normal">jours</span></p>
             </div>
             <div className="bg-white p-5 rounded-xl shadow-sm border border-outline-variant/20">
               <span className="material-symbols-outlined text-primary text-2xl mb-2">verified</span>
-              <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Validés</p>
-              <p className="text-3xl font-extrabold text-primary">{stats.byStatus['VALIDE'] || 0}</p>
+              <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Validés</p><p className="text-3xl font-extrabold text-primary">{stats.byStatus['VALIDE'] || 0}</p>
             </div>
           </div>
 
-          {/* Graphique mensuel */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-8">
             <h3 className="font-bold mb-4">Volume d'examens mensuels</h3>
             <div className="flex items-end justify-between gap-3 h-48">
@@ -207,54 +200,39 @@ export default function ReportsPage() {
             </div>
           </div>
 
-          {/* Répartition par type */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20">
               <h3 className="font-bold mb-4">Répartition par type d'examen</h3>
-              <div className="space-y-3">
-                {Object.entries(stats.byType).map(([type, count]) => {
-                  const percentage = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
-                  return (
-                    <div key={type}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="font-medium">{type}</span>
-                        <span className="font-bold text-primary">{count} ({percentage}%)</span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                        <div className="bg-primary h-2 rounded-full" style={{ width: `${percentage}%` }}></div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              {Object.entries(stats.byType).map(([type, count]) => {
+                const percentage = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+                return (
+                  <div key={type} className="mb-3">
+                    <div className="flex justify-between text-sm mb-1"><span className="font-medium">{type}</span><span className="font-bold text-primary">{count} ({percentage}%)</span></div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-primary h-2 rounded-full" style={{ width: `${percentage}%` }}></div></div>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Top diagnostics */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20">
               <h3 className="font-bold mb-4">Top diagnostics CIM-10</h3>
               <div className="space-y-3">
                 {stats.topDiagnostics.map((diag, idx) => (
                   <div key={idx} className="flex justify-between items-center p-3 bg-[#f2f3fb] rounded-lg">
-                    <div>
-                      <span className="font-mono text-xs font-bold text-primary">{diag.code}</span>
-                      <p className="text-xs text-slate-600 mt-0.5">{diag.name}</p>
-                    </div>
+                    <div><span className="font-mono text-xs font-bold text-primary">{diag.code}</span><p className="text-xs text-slate-600 mt-0.5">{diag.name}</p></div>
                     <span className="text-xl font-extrabold text-primary">{diag.count}</span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
-
-          {/* Export PDF */}
-          <div className="flex justify-end">
-            <button className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:opacity-90 transition">
-              <span className="material-symbols-outlined text-base">download</span>
-              Exporter le rapport (PDF)
-            </button>
-          </div>
         </div>
       </main>
+
+      <button onClick={exportToPDF} className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-[#00478d] to-[#005eb8] text-white rounded-full font-bold text-sm shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200">
+        <span className="material-symbols-outlined text-base">download</span>
+        Exporter le rapport (PDF)
+      </button>
     </div>
   );
 }

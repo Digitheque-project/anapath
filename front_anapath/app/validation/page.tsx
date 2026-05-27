@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import TopBar from '@/components/TopBar';
 import axios from 'axios';
 
 interface AnapathRequest {
@@ -11,14 +12,8 @@ interface AnapathRequest {
   patientId: string;
   typeExamen: string;
   statut: string;
-  prelevement: {
-    site: string;
-    description: string;
-  };
-  resultat: {
-    conclusion: string;
-    details: string;
-  } | null;
+  prelevement: { site: string; description: string };
+  resultat: { conclusion: string; details: string } | null;
 }
 
 export default function ValidationPage() {
@@ -27,14 +22,8 @@ export default function ValidationPage() {
   const [selectedRequest, setSelectedRequest] = useState<AnapathRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
-  const [resultData, setResultData] = useState({
-    details: '',
-    conclusion: ''
-  });
-  const [signature, setSignature] = useState({
-    signature: '',
-    ordreProfessionnelNumber: ''
-  });
+  const [resultData, setResultData] = useState({ details: '', conclusion: '' });
+  const [signature, setSignature] = useState({ signature: '', ordreProfessionnelNumber: '' });
 
   useEffect(() => {
     fetchData();
@@ -50,6 +39,12 @@ export default function ValidationPage() {
       setRequests(pendingRequests);
       if (pendingRequests.length > 0 && !selectedRequest) {
         setSelectedRequest(pendingRequests[0]);
+        if (pendingRequests[0].resultat) {
+          setResultData({
+            details: pendingRequests[0].resultat.details || '',
+            conclusion: pendingRequests[0].resultat.conclusion || ''
+          });
+        }
       }
     } catch (error) {
       console.error('Erreur:', error);
@@ -81,15 +76,10 @@ export default function ValidationPage() {
       setUpdating(true);
       await axios.patch(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${selectedRequest.id}`, {
         statut: 'RESULTAT_DISPONIBLE',
-        resultat: {
-          details: resultData.details,
-          conclusion: resultData.conclusion
-        }
+        resultat: { details: resultData.details, conclusion: resultData.conclusion }
       });
       await fetchData();
-      if (selectedRequest) {
-        await loadRequest(selectedRequest.id);
-      }
+      if (selectedRequest) await loadRequest(selectedRequest.id);
       alert('Résultat sauvegardé !');
     } catch (error) {
       console.error('Erreur:', error);
@@ -141,29 +131,11 @@ export default function ValidationPage() {
     <div className="flex min-h-screen bg-[#f9f9ff] text-[#191c21]">
       <div className="fixed inset-0 grain-overlay z-[60] pointer-events-none"></div>
       <Sidebar />
-
+      
       <main className="flex-1 ml-64 min-h-screen flex flex-col w-[calc(100%-256px)]">
+        <TopBar />
         
-        <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl flex justify-between items-center px-6 py-3 shadow-sm">
-          <div className="flex items-center gap-4">
-            <h2 className="text-lg font-black text-blue-900 tracking-tight">Validation médicale</h2>
-            {selectedRequest && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-100 rounded-full">
-                <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
-                <span className="text-xs font-semibold text-orange-700">En attente</span>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#00478d]/10 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[#00478d] text-sm">person</span>
-            </div>
-          </div>
-        </header>
-
         <div className="flex-1 p-6 w-full max-w-6xl mx-auto">
-          
-          {/* Sélecteur de demande */}
           {requests.length > 0 ? (
             <div className="mb-6">
               <label className="text-xs font-bold text-slate-400 uppercase">Demande à traiter</label>
@@ -183,14 +155,11 @@ export default function ValidationPage() {
             <div className="bg-green-50 p-6 rounded-xl text-center mb-6">
               <span className="material-symbols-outlined text-4xl text-green-600">check_circle</span>
               <p className="text-green-700 font-semibold mt-2">Aucune demande en attente de validation</p>
-              <p className="text-green-600 text-sm">Toutes les demandes ont été traitées.</p>
             </div>
           )}
 
           {selectedRequest && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
-              {/* Colonne gauche - Infos patient */}
               <div className="lg:col-span-2 space-y-6">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20">
                   <h3 className="font-bold text-primary mb-4">👤 Informations patient</h3>
@@ -225,20 +194,13 @@ export default function ValidationPage() {
                         placeholder="Résumé final du diagnostic..."
                       />
                     </div>
-                    {selectedRequest.statut !== 'VALIDE' && (
-                      <button
-                        onClick={handleSaveResult}
-                        disabled={updating}
-                        className="px-6 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:opacity-90 transition"
-                      >
-                        {updating ? 'Sauvegarde...' : '💾 Sauvegarder le résultat'}
-                      </button>
-                    )}
+                    <button onClick={handleSaveResult} disabled={updating} className="px-6 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:opacity-90 transition">
+                      {updating ? 'Sauvegarde...' : '💾 Sauvegarder le résultat'}
+                    </button>
                   </div>
                 </div>
               </div>
 
-              {/* Colonne droite - Validation */}
               <div className="space-y-6">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20">
                   <h3 className="font-bold text-primary mb-4">✍️ Signature numérique</h3>

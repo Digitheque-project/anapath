@@ -4,25 +4,29 @@ import { useState, useEffect, useRef } from 'react';
 
 interface ExtemporaneTimerProps {
   startTime: Date | string;
+  requestId: string;
+  anapathId: string;
+  patientId: string;
   onTimeOut?: () => void;
   onAlert?: () => void;
 }
 
-export default function ExtemporaneTimer({ startTime, onTimeOut, onAlert }: ExtemporaneTimerProps) {
+export default function ExtemporaneTimer({ startTime, requestId, anapathId, patientId, onTimeOut, onAlert }: ExtemporaneTimerProps) {
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [isAlert, setIsAlert] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
-  const [showAlertToast, setShowAlertToast] = useState(false);
-  const [showTimeoutToast, setShowTimeoutToast] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [soundStarted, setSoundStarted] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const alertSoundIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const notificationRef = useRef<Notification | null>(null);
   const alertTriggeredRef = useRef(false);
   const timeoutTriggeredRef = useRef(false);
-  const originalVolumeRef = useRef<number>(1);
-  const notificationRef = useRef<Notification | null>(null);
+  const tenMinAlertTriggeredRef = useRef(false);
 
-  // Créer un son continu strident (non stop)
+  // Générer un son continu strident
   const startContinuousSound = () => {
+    if (soundStarted) return;
+    
     try {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextClass) return;
@@ -34,7 +38,6 @@ export default function ExtemporaneTimer({ startTime, onTimeOut, onAlert }: Exte
       audioContextRef.current = new AudioContextClass();
       const context = audioContextRef.current;
 
-      // Forcer le son même si l'appareil est en silencieux
       if (context.state === 'suspended') {
         context.resume();
       }
@@ -45,24 +48,30 @@ export default function ExtemporaneTimer({ startTime, onTimeOut, onAlert }: Exte
       oscillator.connect(gainNode);
       gainNode.connect(context.destination);
       
-      oscillator.type = 'sawtooth'; // Son agressif
-      oscillator.frequency.value = 880; // Fréquence aiguë
-      
-      // Volume très fort (max)
-      gainNode.gain.value = 0.8;
+      oscillator.type = 'sawtooth';
+      oscillator.frequency.value = 880;
+      gainNode.gain.value = 0.6;
       
       oscillator.start();
       
-      // Sauvegarder l'oscillateur pour pouvoir l'arrêter plus tard
       (window as any).__alertOscillator = oscillator;
       (window as any).__alertGain = gainNode;
+      
+      setSoundStarted(true);
+      
+      const audioElements = document.querySelectorAll('audio, video');
+      audioElements.forEach((element) => {
+        const mediaElement = element as HTMLMediaElement;
+        if (!mediaElement.paused) {
+          mediaElement.pause();
+        }
+      });
       
     } catch (error) {
       console.error('Erreur audio:', error);
     }
   };
 
-  // Arrêter le son d'alerte
   const stopContinuousSound = () => {
     try {
       if ((window as any).__alertOscillator) {
@@ -73,46 +82,17 @@ export default function ExtemporaneTimer({ startTime, onTimeOut, onAlert }: Exte
         audioContextRef.current.close();
         audioContextRef.current = null;
       }
+      setSoundStarted(false);
     } catch (error) {
       console.error('Erreur arrêt son:', error);
     }
   };
 
-  // Arrêter tous les sons en arrière-plan (musique, vidéo, etc.)
-  const stopAllBackgroundAudio = () => {
-    try {
-      // Méthode 1: Créer un élément audio silencieux qui demande le focus audio
-      const audioElements = document.querySelectorAll('audio, video');
-      audioElements.forEach((element) => {
-        const mediaElement = element as HTMLMediaElement;
-        if (!mediaElement.paused) {
-          originalVolumeRef.current = mediaElement.volume;
-          mediaElement.volume = 0;
-          mediaElement.pause();
-        }
-      });
-
-      // Méthode 2: Utiliser l'API AudioContext pour prendre le contrôle
-      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-        audioContextRef.current.resume();
-      }
-
-      // Méthode 3: Créer un nouveau contexte pour prendre le contrôle audio
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      const tempContext = new AudioContextClass();
-      tempContext.close();
-      
-    } catch (error) {
-      console.error('Erreur arrêt audio background:', error);
-    }
-  };
-
-  // Envoyer notification push avec son continu
-  const sendPushNotification = (title: string, body: string, isAlertType: boolean = true) => {
+  // Envoyer une notification système
+  const sendSystemNotification = (title: string, body: string) => {
     if (!('Notification' in window)) return;
 
     if (Notification.permission === 'granted') {
-      // Fermer l'ancienne notification si elle existe
       if (notificationRef.current) {
         notificationRef.current.close();
       }
@@ -120,43 +100,68 @@ export default function ExtemporaneTimer({ startTime, onTimeOut, onAlert }: Exte
       const notification = new Notification(title, {
         body: body,
         icon: '/favicon.ico',
-        tag: 'stat-alert',
+        tag: `stat-alert-${requestId}`,
         requireInteraction: true,
-        silent: false, // Le son est géré par notre système
-        //vibrate: [500, 300, 500],
+        vibrate: [500, 300, 500],
       });
 
       notificationRef.current = notification;
 
-      // Quand on clique sur la notification
       notification.onclick = () => {
-        // Arrêter le son d'alerte
         stopContinuousSound();
-        // Fermer la notification
         notification.close();
         notificationRef.current = null;
-        // Remettre le volume normal sur les médias
-        const audioElements = document.querySelectorAll('audio, video');
-        audioElements.forEach((element) => {
-          const mediaElement = element as HTMLMediaElement;
-          if (mediaElement.volume === 0 && originalVolumeRef.current > 0) {
-            mediaElement.volume = originalVolumeRef.current;
-          }
-        });
-        // Focus sur la fenêtre
         window.focus();
-        // Rediriger vers la page de la demande si nécessaire
-        // window.location.href = '/worklist';
+        window.location.href = `/worklist/${requestId}`;
       };
 
-      // La notification reste jusqu'à clic (requireInteraction: true)
-      
     } else if (Notification.permission !== 'denied') {
-      Notification.requestPermission().then(permission => {
-        if (permission === 'granted') {
-          sendPushNotification(title, body, isAlertType);
-        }
-      });
+      Notification.requestPermission();
+    }
+  };
+
+  // Déclencher une alerte dans la cloche (via un événement personnalisé)
+  const triggerBellNotification = (type: 'ten_min' | 'five_min' | 'expired') => {
+    let title = '';
+    let message = '';
+    
+    switch (type) {
+      case 'ten_min':
+        title = '⏰ STAT - 10 minutes restantes';
+        message = `Examen extemporané pour ${patientId} (${anapathId}) - Traitement urgent requis`;
+        break;
+      case 'five_min':
+        title = '🚨 STAT - 5 minutes restantes !';
+        message = `Délai critique pour ${patientId} (${anapathId}) - Intervention immédiate nécessaire`;
+        break;
+      case 'expired':
+        title = '❌ STAT - Délai dépassé';
+        message = `Le délai de 30 minutes est écoulé pour ${patientId} (${anapathId})`;
+        break;
+    }
+    
+    // Événement personnalisé pour la cloche
+    const event = new CustomEvent('stat-alert', {
+      detail: {
+        id: requestId,
+        anapathId,
+        patientId,
+        title,
+        message,
+        type,
+        timestamp: new Date().toISOString()
+      }
+    });
+    window.dispatchEvent(event);
+    
+    // Notification système pour 5 min et expiration
+    if (type !== 'ten_min') {
+      sendSystemNotification(title, message);
+    }
+    
+    // Son pour 5 min
+    if (type === 'five_min') {
+      startContinuousSound();
     }
   };
 
@@ -169,6 +174,8 @@ export default function ExtemporaneTimer({ startTime, onTimeOut, onAlert }: Exte
   useEffect(() => {
     const start = new Date(startTime);
     const deadline = new Date(start.getTime() + 30 * 60 * 1000);
+    const tenMinAlert = new Date(start.getTime() + 20 * 60 * 1000); // 10 min avant = 20 min après début
+    const fiveMinAlert = new Date(start.getTime() + 25 * 60 * 1000); // 5 min avant
 
     const updateTimer = () => {
       const now = new Date();
@@ -177,20 +184,14 @@ export default function ExtemporaneTimer({ startTime, onTimeOut, onAlert }: Exte
       if (remaining <= 0) {
         setTimeLeft(0);
         setIsExpired(true);
+        stopContinuousSound();
         
         if (!timeoutTriggeredRef.current) {
           timeoutTriggeredRef.current = true;
-          setShowTimeoutToast(true);
-          
-          // Couper tous les sons en arrière-plan
-          stopAllBackgroundAudio();
-          // Jouer le son continu
-          startContinuousSound();
-          // Envoyer notification
-          sendPushNotification('⏰ TEMPS STAT ÉCOULÉ', 'Le délai de 30 minutes est dépassé ! Traitement en urgence requis.');
-          
+          setShowToast(true);
+          triggerBellNotification('expired');
           if (onTimeOut) onTimeOut();
-          setTimeout(() => setShowTimeoutToast(false), 8000);
+          setTimeout(() => setShowToast(false), 8000);
         }
         return;
       }
@@ -198,23 +199,22 @@ export default function ExtemporaneTimer({ startTime, onTimeOut, onAlert }: Exte
       setTimeLeft(Math.floor(remaining / 1000));
       
       const remainingSeconds = Math.floor(remaining / 1000);
-      // Alerte à 5 minutes (300 secondes) - UNE SEULE FOIS
+      
+      // Alerte à 10 minutes (reste 600 secondes)
+      if (remainingSeconds <= 600 && !tenMinAlertTriggeredRef.current && !isExpired) {
+        tenMinAlertTriggeredRef.current = true;
+        triggerBellNotification('ten_min');
+      }
+      
+      // Alerte à 5 minutes
       if (remainingSeconds <= 300 && !alertTriggeredRef.current && !isExpired) {
         alertTriggeredRef.current = true;
         setIsAlert(true);
-        setShowAlertToast(true);
-        
-        // Couper tous les sons en arrière-plan (musique, vidéo, etc.)
-        stopAllBackgroundAudio();
-        
-        // Démarrer le son continu STRIDENT
-        startContinuousSound();
-        
-        // Envoyer notification PUSH (non bloquante)
-        sendPushNotification('🚨 ALERTE STAT ANAPATH', 'Il reste 5 minutes pour traiter l\'examen extemporané ! Cliquez pour arrêter l\'alerte.');
+        setShowToast(true);
+        triggerBellNotification('five_min');
         
         if (onAlert) onAlert();
-        setTimeout(() => setShowAlertToast(false), 8000);
+        setTimeout(() => setShowToast(false), 10000);
       }
     };
 
@@ -225,7 +225,7 @@ export default function ExtemporaneTimer({ startTime, onTimeOut, onAlert }: Exte
       clearInterval(interval);
       stopContinuousSound();
     };
-  }, [startTime, onTimeOut, onAlert, isExpired]);
+  }, [startTime, requestId, anapathId, patientId, onTimeOut, onAlert, isExpired]);
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -240,36 +240,22 @@ export default function ExtemporaneTimer({ startTime, onTimeOut, onAlert }: Exte
     return 'bg-primary text-white';
   };
 
-  // Arrêter le son manuellement (si on ferme la page)
-  useEffect(() => {
-    return () => {
-      stopContinuousSound();
-    };
-  }, []);
-
-  // Fonction pour arrêter manuellement l'alerte (si bouton ajouté)
-  const stopAlertManually = () => {
-    stopContinuousSound();
-    if (notificationRef.current) {
-      notificationRef.current.close();
-      notificationRef.current = null;
-    }
-  };
-
   return (
     <>
-      {/* Toast notification pour l'alerte 5 min */}
-      {showAlertToast && (
+      {showToast && (
         <div className="fixed top-20 right-4 z-50 animate-in slide-in-from-right duration-300">
-          <div className="bg-red-600 text-white p-4 rounded-lg shadow-2xl border-l-4 border-yellow-400 max-w-sm">
+          <div className={`${isExpired ? 'bg-red-800' : 'bg-red-600'} text-white p-4 rounded-lg shadow-2xl max-w-sm`}>
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined text-2xl animate-pulse">warning</span>
               <div className="flex-1">
-                <p className="font-bold text-sm">🚨 ALERTE STAT !</p>
-                <p className="text-xs mt-1">Il reste 5 minutes pour traiter cet examen extemporané.</p>
-                <p className="text-[10px] mt-1 opacity-80">Cliquez sur la notification pour arrêter l'alerte.</p>
+                <p className="font-bold text-sm">{isExpired ? '⏰ TEMPS STAT ÉCOULÉ !' : '🚨 ALERTE STAT !'}</p>
+                <p className="text-xs mt-1">
+                  {isExpired 
+                    ? 'Le délai de 30 minutes est dépassé. Traitement en urgence requis.' 
+                    : 'Il reste 5 minutes pour traiter cet examen extemporané.'}
+                </p>
               </div>
-              <button onClick={() => setShowAlertToast(false)} className="text-white/80 hover:text-white">
+              <button onClick={() => setShowToast(false)} className="text-white/80 hover:text-white">
                 <span className="material-symbols-outlined text-sm">close</span>
               </button>
             </div>
@@ -277,26 +263,6 @@ export default function ExtemporaneTimer({ startTime, onTimeOut, onAlert }: Exte
         </div>
       )}
 
-      {/* Toast notification pour le temps écoulé */}
-      {showTimeoutToast && (
-        <div className="fixed top-20 right-4 z-50 animate-in slide-in-from-right duration-300">
-          <div className="bg-red-800 text-white p-4 rounded-lg shadow-2xl border-l-4 border-red-400 max-w-sm">
-            <div className="flex items-start gap-3">
-              <span className="material-symbols-outlined text-2xl animate-pulse">timer_off</span>
-              <div className="flex-1">
-                <p className="font-bold text-sm">⏰ TEMPS STAT ÉCOULÉ !</p>
-                <p className="text-xs mt-1">Le délai de 30 minutes est dépassé. Traitement en urgence requis.</p>
-                <p className="text-[10px] mt-1 opacity-80">Cliquez sur la notification pour arrêter l'alerte.</p>
-              </div>
-              <button onClick={() => setShowTimeoutToast(false)} className="text-white/80 hover:text-white">
-                <span className="material-symbols-outlined text-sm">close</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Le minuteur lui-même */}
       <div className={`${getColor()} p-4 rounded-lg text-center transition-all duration-300 shadow-lg`}>
         <div className="flex items-center justify-center gap-2">
           <span className="material-symbols-outlined text-2xl">
