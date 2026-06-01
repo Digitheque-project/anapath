@@ -9,21 +9,19 @@ import { AnapathRequest } from './anapath/entities/anapath-request.entity';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
+    ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'mysql',
-        host: configService.get('DB_HOST', 'localhost'),
-        port: configService.get('DB_PORT', 3306),
-        username: configService.get('DB_USER', 'root'),
-        password: configService.get('DB_PASSWORD', ''),
-        database: configService.get('DB_NAME', 'anapath_database'),
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        host: config.get('DB_HOST'),
+        port: config.get('DB_PORT'),
+        username: config.get('DB_USER'),
+        password: config.get('DB_PASSWORD'),
+        database: config.get('DB_NAME'),
         entities: [AnapathRequest],
         synchronize: true,
-        logging: true,
+        ssl: { rejectUnauthorized: false },
       }),
       inject: [ConfigService],
     }),
