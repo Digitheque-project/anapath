@@ -1,25 +1,19 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, Logger } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { ReceiveNotificationDto } from './dto/receive-notification.dto';
 
+@ApiTags('notifications')
 @Controller('notifications')
 export class NotificationController {
   private readonly logger = new Logger(NotificationController.name);
 
   @Post()
+  @ApiOperation({ summary: 'Recevoir une notification externe' })
+  @ApiBody({ type: ReceiveNotificationDto })
+  @ApiResponse({ status: 200, description: 'Notification reçue avec succès' })
   @HttpCode(HttpStatus.OK)
   async receiveNotification(@Body() notification: ReceiveNotificationDto) {
     this.logger.log(`📨 Notification reçue: ${notification.type} - ${notification.title}`);
-    
-    console.log('┌─────────────────────────────────────────┐');
-    console.log(`│ 📢 TYPE: ${notification.type}`);
-    console.log(`│ 📌 TITRE: ${notification.title}`);
-    console.log(`│ 💬 MESSAGE: ${notification.message}`);
-    if (notification.metadata) {
-      console.log(`│ 📦 METADATA: ${JSON.stringify(notification.metadata)}`);
-    }
-    console.log(`│ 🕐 REÇU LE: ${new Date().toLocaleString()}`);
-    console.log('└─────────────────────────────────────────┘');
-    
     return {
       success: true,
       message: 'Notification reçue avec succès',

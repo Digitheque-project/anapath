@@ -10,34 +10,34 @@ export enum NotificationType {
 }
 
 export class ReceiveNotificationDto {
-  @ApiProperty({ enum: NotificationType })
+  @ApiProperty({ enum: NotificationType, example: 'STAT_ALERT' })
   @IsEnum(NotificationType)
   type: NotificationType;
 
-  @ApiProperty()
+  @ApiProperty({ example: '🚨 ALERTE STAT' })
   @IsString()
   title: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: 'Examen extemporané urgent - délai 30 minutes' })
   @IsString()
   message: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: 'high', enum: ['high', 'medium', 'low'], required: false })
   @IsString()
   @IsOptional()
   priority?: 'high' | 'medium' | 'low';
 
-  @ApiProperty()
-  @IsObject()
-  @IsOptional()
-  metadata?: Record<string, any>;
-
-  @ApiProperty()
+  @ApiProperty({ example: 'service-notification', required: false })
   @IsString()
   @IsOptional()
   source?: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: { anapathId: 'ANP-2026-12345' }, required: false })
+  @IsObject()
+  @IsOptional()
+  metadata?: Record<string, any>;
+
+  @ApiProperty({ example: '2026-06-01T19:02:21.027Z', required: false })
   @IsString()
   @IsOptional()
   timestamp?: string;
