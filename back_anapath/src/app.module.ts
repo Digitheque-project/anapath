@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AnapathModule } from './anapath/anapath.module';
+import { NotificationModule } from './notification/notification.module';
 import { AnapathRequest } from './anapath/entities/anapath-request.entity';
 
 @Module({
@@ -14,20 +15,20 @@ import { AnapathRequest } from './anapath/entities/anapath-request.entity';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
+        type: 'mysql',
         host: configService.get('DB_HOST', 'localhost'),
-        port: configService.get('DB_PORT', 5432),
-        username: configService.get('DB_USER', 'postgres'),
-        password: configService.get('DB_PASSWORD', 'postgres'),
-        database: configService.get('DB_NAME', 'anapath_db'),
+        port: configService.get('DB_PORT', 3306),
+        username: configService.get('DB_USER', 'root'),
+        password: configService.get('DB_PASSWORD', ''),
+        database: configService.get('DB_NAME', 'anapath_database'),
         entities: [AnapathRequest],
         synchronize: true,
-        logging: false,
-        ssl: configService.get('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
+        logging: true,
       }),
       inject: [ConfigService],
     }),
     AnapathModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
