@@ -8,8 +8,9 @@ export class NotificationClient {
   private readonly serviceId: string;
 
   constructor(private configService: ConfigService) {
-    // On force le typage avec 'as string' pour éviter les erreurs TypeScript
-    this.baseUrl = this.configService.get<string>('NOTIFICATION_API_URL') || '';
+    const raw = this.configService.get<string>('NOTIFICATION_API_URL') || '';
+    // service-notification expose /notifications (pas /api/notifications)
+    this.baseUrl = raw.replace(/\/api\/?$/, '').replace(/\/$/, '');
     this.serviceId = this.configService.get<string>('ANAPATH_ID') || 'anapath-service';
   }
 
@@ -21,12 +22,15 @@ export class NotificationClient {
   }
 
   async sendNotification(notification: {
-    type: 'STAT_ALERT' | 'RESULTAT_DISPONIBLE' | 'VALIDATION' | 'URGENT';
-    title: string;
-    message: string;
-    priority: 'high' | 'medium' | 'low';
-    recipientIds?: string[];
-    metadata?: Record<string, any>;
+    type: string;
+    motif: string;
+    urgence?: number;
+    sourceServiceId?: string;
+    sourceServiceName?: string;
+    targetServiceId?: string;
+    targetServiceName?: string;
+    patientId?: string;
+    payload?: Record<string, any>;
   }) {
     if (!this.baseUrl) {
       console.warn('⚠️ NOTIFICATION_API_URL non définie, notification non envoyée');
@@ -34,10 +38,22 @@ export class NotificationClient {
     }
 
     try {
-      const response = await axios.post(`${this.baseUrl}/notifications`, notification, {
+      const payload = {
+        type: notification.type,
+        motif: notification.motif,
+        urgence: notification.urgence ?? 3,
+        sourceServiceId: notification.sourceServiceId ?? this.serviceId,
+        sourceServiceName: notification.sourceServiceName ?? 'Anapath',
+        targetServiceId: notification.targetServiceId,
+        targetServiceName: notification.targetServiceName,
+        patientId: notification.patientId,
+        payload: notification.payload,
+      };
+
+      const response = await axios.post(`${this.baseUrl}/notifications`, payload, {
         headers: this.getHeaders(),
       });
-      console.log(`✅ Notification envoyée: ${notification.title}`);
+      console.log(`✅ Notification envoyée: ${notification.motif}`);
       return response.data;
     } catch (error) {
       console.error(`❌ Erreur envoi notification:`, error.message);
@@ -45,33 +61,51 @@ export class NotificationClient {
     }
   }
 
-  async sendStatAlert(anapathId: string, patientId: string, message: string) {
+  async sendStatAlert(
+    anapathId: string,
+    patientId: string,
+    message: string,
+    targetServiceId: string,
+  ) {
     return this.sendNotification({
-      type: 'STAT_ALERT',
-      title: '🚨 ALERTE STAT - Examen extemporané',
-      message: `${message} - ID: ${anapathId} - Patient: ${patientId}`,
-      priority: 'high',
-      metadata: { anapathId, patientId, type: 'extemporane' },
+      type: 'DEMANDE_EXAMEN',
+      motif: `🚨 ALERTE STAT - ${message} - ID: ${anapathId} - Patient: ${patientId}`,
+      urgence: 5,
+      targetServiceId,
+      targetServiceName: 'Destinataire',
+      patientId,
+      payload: { anapathId, patientId, type: 'extemporane' },
     });
   }
 
-  async sendResultatDisponible(anapathId: string, patientId: string) {
+  async sendResultatDisponible(
+    anapathId: string,
+    patientId: string,
+    targetServiceId: string,
+  ) {
     return this.sendNotification({
-      type: 'RESULTAT_DISPONIBLE',
-      title: '📋 Résultat disponible',
-      message: `Le résultat pour l'examen ${anapathId} (patient ${patientId}) est disponible.`,
-      priority: 'medium',
-      metadata: { anapathId, patientId },
+      type: 'RESULTAT_EXAMEN',
+      motif: `Résultat disponible pour l'examen ${anapathId} (patient ${patientId})`,
+      urgence: 4,
+      targetServiceId,
+      patientId,
+      payload: { anapathId, patientId },
     });
   }
 
-  async sendValidationNotification(anapathId: string, patientId: string, validateur: string) {
+  async sendValidationNotification(
+    anapathId: string,
+    patientId: string,
+    validateur: string,
+    targetServiceId: string,
+  ) {
     return this.sendNotification({
-      type: 'VALIDATION',
-      title: '✅ Demande validée',
-      message: `L'examen ${anapathId} a été validé par ${validateur}.`,
-      priority: 'low',
-      metadata: { anapathId, patientId, validateur },
+      type: 'AVIS_INTER_SERVICE',
+      motif: `Examen ${anapathId} validé par ${validateur}`,
+      urgence: 2,
+      targetServiceId,
+      patientId,
+      payload: { anapathId, patientId, validateur },
     });
   }
 }
