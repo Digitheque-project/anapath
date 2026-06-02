@@ -32,6 +32,12 @@ services:
         fromDatabase:
           name: anapath-db
           property: database
+      - key: NOTIFICATION_API_URL
+        sync: false
+      - key: ANAPATH_ID
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
 
 databases:
   - name: anapath-db

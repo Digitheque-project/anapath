@@ -66,7 +66,6 @@ export default function SettingsMenu() {
 
   const handleLogout = () => {
     // Nettoyer les données de session
-    localStorage.removeItem('anapath_notifications');
     localStorage.removeItem('theme');
     // Rediriger vers la page de connexion
     router.push('/login');

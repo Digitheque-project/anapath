@@ -1,91 +1,93 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  fetchNotifications,
+  fetchUnreadCount,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  type NotificationItem,
+} from '@/lib/notifications';
 
-interface Notification {
-  id: string;
-  type: 'STAT' | 'Urgent' | 'Normal';
-  title: string;
-  message: string;
-  patientId: string;
-  anapathId: string;
-  requestId: string;
-  timestamp: string;
-  read: boolean;
-}
+const POLL_INTERVAL_MS = 30_000;
 
 export default function NotificationBell() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const router = useRouter();
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    loadStoredNotifications();
-    
-    const handleStatAlert = (event: CustomEvent) => {
-      const { id, anapathId, patientId, title, message, timestamp } = event.detail;
-      
-      const newNotification: Notification = {
-        id: `stat-${Date.now()}`,
-        type: 'STAT',
-        title,
-        message,
-        patientId,
-        anapathId,
-        requestId: id,
-        timestamp,
-        read: false,
-      };
-      
-      setNotifications(prev => {
-        const updated = [newNotification, ...prev];
-        localStorage.setItem('anapath_notifications', JSON.stringify(updated.slice(0, 50)));
-        return updated.slice(0, 50);
-      });
-      setUnreadCount(prev => prev + 1);
-    };
-    
-    window.addEventListener('stat-alert', handleStatAlert as EventListener);
-    
-    return () => {
-      window.removeEventListener('stat-alert', handleStatAlert as EventListener);
-    };
-  }, []);
+  const loadNotifications = useCallback(async () => {
+    if (!process.env.NEXT_PUBLIC_API_URL) {
+      console.warn('NEXT_PUBLIC_API_URL non définie');
+      setLoading(false);
+      return;
+    }
 
-  const loadStoredNotifications = () => {
     try {
-      const stored = localStorage.getItem('anapath_notifications');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setNotifications(parsed);
-        setUnreadCount(parsed.filter((n: Notification) => !n.read).length);
-      }
+      const [items, count] = await Promise.all([fetchNotifications(), fetchUnreadCount()]);
+      setNotifications(items);
+      setUnreadCount(count);
     } catch (e) {
       console.error('Erreur chargement notifications:', e);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
-  const markAsRead = (id: string, requestId?: string) => {
-    setNotifications(prev => {
-      const updated = prev.map(n => n.id === id ? { ...n, read: true } : n);
-      localStorage.setItem('anapath_notifications', JSON.stringify(updated));
-      return updated;
-    });
-    setUnreadCount(prev => Math.max(0, prev - 1));
-    
+  useEffect(() => {
+    loadNotifications();
+
+    const interval = setInterval(loadNotifications, POLL_INTERVAL_MS);
+
+    const handleStatAlert = () => {
+      loadNotifications();
+    };
+
+    window.addEventListener('stat-alert', handleStatAlert);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('stat-alert', handleStatAlert);
+    };
+  }, [loadNotifications]);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadNotifications();
+    }
+  }, [isOpen, loadNotifications]);
+
+  const markAsRead = async (id: string, requestId?: string) => {
+    const notif = notifications.find((n) => n.id === id);
+    if (!notif?.read) {
+      try {
+        await markNotificationAsRead(id);
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      } catch (e) {
+        console.error('Erreur marquage notification:', e);
+        return;
+      }
+    }
+
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+
     if (requestId) {
-      window.location.href = `/worklist/${requestId}`;
+      router.push(`/worklist/${requestId}`);
     }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => {
-      const updated = prev.map(n => ({ ...n, read: true }));
-      localStorage.setItem('anapath_notifications', JSON.stringify(updated));
-      return updated;
-    });
-    setUnreadCount(0);
+  const markAllAsRead = async () => {
+    try {
+      await markAllNotificationsAsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch (e) {
+      console.error('Erreur marquage notifications:', e);
+    }
   };
 
   useEffect(() => {
@@ -100,16 +102,22 @@ export default function NotificationBell() {
 
   const getNotificationStyle = (type: string) => {
     switch (type) {
-      case 'STAT': return 'bg-red-50 border-l-4 border-red-500 hover:bg-red-100';
-      case 'Urgent': return 'bg-orange-50 border-l-4 border-orange-500 hover:bg-orange-100';
-      default: return 'bg-gray-50 border-l-4 border-gray-300 hover:bg-gray-100';
+      case 'STAT':
+        return 'bg-red-50 border-l-4 border-red-500 hover:bg-red-100';
+      case 'Urgent':
+        return 'bg-orange-50 border-l-4 border-orange-500 hover:bg-orange-100';
+      default:
+        return 'bg-gray-50 border-l-4 border-gray-300 hover:bg-gray-100';
     }
   };
 
-  const getIcon = (title: string) => {
+  const getIcon = (title: string, type: string) => {
+    if (type === 'STAT' || title.includes('ALERTE')) return '🚨';
     if (title.includes('5 minutes')) return '🚨';
     if (title.includes('10 minutes')) return '⏰';
     if (title.includes('dépassé')) return '❌';
+    if (title.includes('Résultat')) return '📋';
+    if (title.includes('validé')) return '✅';
     return '🔔';
   };
 
@@ -120,6 +128,7 @@ export default function NotificationBell() {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-2 rounded-full hover:bg-slate-100 transition-colors text-slate-600"
+        aria-label="Notifications"
       >
         <span className="material-symbols-outlined">notifications</span>
         {unreadCount > 0 && (
@@ -139,9 +148,13 @@ export default function NotificationBell() {
               </button>
             )}
           </div>
-          
+
           <div className="max-h-96 overflow-y-auto">
-            {notifications.length === 0 ? (
+            {loading ? (
+              <div className="p-8 text-center text-gray-400">
+                <p className="text-sm">Chargement…</p>
+              </div>
+            ) : notifications.length === 0 ? (
               <div className="p-8 text-center text-gray-400">
                 <span className="material-symbols-outlined text-4xl">notifications_none</span>
                 <p className="mt-2 text-sm">Aucune notification</p>
@@ -151,19 +164,26 @@ export default function NotificationBell() {
                 <div
                   key={notif.id}
                   className={`p-3 cursor-pointer transition-all ${getNotificationStyle(notif.type)} ${!notif.read ? 'bg-opacity-100' : 'bg-opacity-50'}`}
-                  onClick={() => markAsRead(notif.id, notif.requestId)}
+                  onClick={() => markAsRead(notif.id, notif.requestId || undefined)}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="text-xl">{getIcon(notif.title)}</div>
+                    <div className="text-xl">{getIcon(notif.title, notif.type)}</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-gray-800">{notif.title}</p>
                       <p className="text-xs text-gray-600 mt-0.5">{notif.message}</p>
+                      {(notif.anapathId || notif.patientId) && (
+                        <p className="text-[10px] text-gray-500 mt-0.5">
+                          {[notif.anapathId, notif.patientId && `Patient ${notif.patientId}`]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
+                      )}
                       <p className="text-[10px] text-gray-400 mt-1">
                         {new Date(notif.timestamp).toLocaleString('fr-FR')}
                       </p>
                     </div>
                     {!notif.read && (
-                      <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+                      <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 shrink-0" />
                     )}
                   </div>
                 </div>

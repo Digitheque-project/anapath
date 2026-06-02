@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { AnapathModule } from './anapath/anapath.module';
 import { NotificationModule } from './notification/notification.module';
 import { AnapathRequest } from './anapath/entities/anapath-request.entity';
+import { NotificationEntity } from './notification/notification.entity';
 
 @Module({
   imports: [
@@ -15,11 +16,11 @@ import { AnapathRequest } from './anapath/entities/anapath-request.entity';
       useFactory: (config: ConfigService) => ({
         type: 'postgres',
         host: config.get('DB_HOST'),
-        port: config.get('DB_PORT'),
+        port: parseInt(config.get('DB_PORT') ?? '5432', 10),
         username: config.get('DB_USER'),
         password: config.get('DB_PASSWORD'),
         database: config.get('DB_NAME'),
-        entities: [AnapathRequest],
+        entities: [AnapathRequest, NotificationEntity],
         synchronize: true,
         ssl: { rejectUnauthorized: false },
       }),

@@ -1,11 +1,18 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  Index,
+} from 'typeorm';
 
 export enum ExamenType {
   FCV_PAP = 'FCV_PAP',
   CYT0PONCTION = 'CYT0PONCTION',
   LIQUIDE = 'LIQUIDE',
   BIOPSIE = 'BIOPSIE',
-  EXTEMPORANE_STAT = 'EXTEMPORANE_STAT'
+  EXTEMPORANE_STAT = 'EXTEMPORANE_STAT',
 }
 
 export enum Statut {
@@ -15,7 +22,7 @@ export enum Statut {
   RESULTAT_DISPONIBLE = 'RESULTAT_DISPONIBLE',
   VALIDE = 'VALIDE',
   ARCHIVE = 'ARCHIVE',
-  ANNULEE = 'ANNULEE'
+  ANNULEE = 'ANNULEE',
 }
 
 @Entity('anapath_requests')
