@@ -8,14 +8,15 @@ export class NotificationClient {
   private readonly serviceId: string;
 
   constructor(private configService: ConfigService) {
-    this.baseUrl = this.configService.get('NOTIFICATION_API_URL');
-    this.serviceId = this.configService.get('ANAPATH_ID');
+    // On force le typage avec 'as string' pour éviter les erreurs TypeScript
+    this.baseUrl = this.configService.get<string>('NOTIFICATION_API_URL') || '';
+    this.serviceId = this.configService.get<string>('ANAPATH_ID') || 'anapath-service';
   }
 
   private getHeaders() {
     return {
       'Content-Type': 'application/json',
-      'X-Service-ID': this.serviceId || 'anapath-service',
+      'X-Service-ID': this.serviceId,
     };
   }
 
