@@ -18,6 +18,7 @@ export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [networkError, setNetworkError] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const loadNotifications = useCallback(async () => {
@@ -31,7 +32,9 @@ export default function NotificationBell() {
       const [items, count] = await Promise.all([fetchNotifications(), fetchUnreadCount()]);
       setNotifications(items);
       setUnreadCount(count);
+      setNetworkError(false);
     } catch (e) {
+      setNetworkError(true);
       console.error('Erreur chargement notifications:', e);
     } finally {
       setLoading(false);
@@ -153,6 +156,14 @@ export default function NotificationBell() {
             {loading ? (
               <div className="p-8 text-center text-gray-400">
                 <p className="text-sm">Chargement…</p>
+              </div>
+            ) : networkError ? (
+              <div className="p-6 text-center text-gray-500">
+                <span className="material-symbols-outlined text-3xl text-orange-400">cloud_off</span>
+                <p className="mt-2 text-sm font-medium">API indisponible</p>
+                <p className="mt-1 text-xs text-gray-400">
+                  Le backend Render démarre peut-être (plan gratuit). Réessayez dans quelques secondes.
+                </p>
               </div>
             ) : notifications.length === 0 ? (
               <div className="p-8 text-center text-gray-400">

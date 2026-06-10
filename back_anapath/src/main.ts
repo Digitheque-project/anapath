@@ -8,9 +8,18 @@ import { Utf8Pipe } from './common/pipes/utf8.pipe';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
-  const corsOrigins = process.env.CORS_ORIGINS
+  const configuredOrigins = process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
-    : ['http://localhost:3000', 'http://localhost:3001'];
+    : [];
+
+  const corsOrigins = [
+    ...new Set([
+      ...configuredOrigins,
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:3001',
+    ]),
+  ].filter(Boolean);
 
   app.enableCors({
     origin: corsOrigins,

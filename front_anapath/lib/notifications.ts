@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { api } from './api';
 
 export type NotificationDisplayType = 'STAT' | 'Urgent' | 'Normal';
 
@@ -26,8 +26,6 @@ export interface NotificationItem {
   read: boolean;
 }
 
-const apiBase = () => process.env.NEXT_PUBLIC_API_URL ?? '';
-
 export function mapApiNotification(n: ApiNotification): NotificationItem {
   const metadata = n.metadata ?? {};
   return {
@@ -50,19 +48,19 @@ function mapDisplayType(type: string, priority?: string): NotificationDisplayTyp
 }
 
 export async function fetchNotifications(): Promise<NotificationItem[]> {
-  const { data } = await axios.get<ApiNotification[]>(`${apiBase()}/notifications`);
+  const { data } = await api.get<ApiNotification[]>('/notifications');
   return data.map(mapApiNotification);
 }
 
 export async function fetchUnreadCount(): Promise<number> {
-  const { data } = await axios.get<{ count: number }>(`${apiBase()}/notifications/unread/count`);
+  const { data } = await api.get<{ count: number }>('/notifications/unread/count');
   return data.count;
 }
 
 export async function markNotificationAsRead(id: string): Promise<void> {
-  await axios.patch(`${apiBase()}/notifications/${id}/read`);
+  await api.patch(`/notifications/${id}/read`);
 }
 
 export async function markAllNotificationsAsRead(): Promise<void> {
-  await axios.patch(`${apiBase()}/notifications/read-all`);
+  await api.patch('/notifications/read-all');
 }
