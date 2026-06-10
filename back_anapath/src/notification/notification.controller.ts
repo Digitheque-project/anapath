@@ -17,6 +17,7 @@ import { Repository } from 'typeorm';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { ReceiveNotificationDto } from './dto/receive-notification.dto';
 import { NotificationResponseDto } from './dto/notification-response.dto';
+import { NotificationReceiveResponseDto } from './dto/notification-receive-response.dto';
 import { NotificationEntity } from './notification.entity';
 import { ServiceNotificationInboundDto } from './dto/service-notification-inbound.dto';
 import {
@@ -37,9 +38,53 @@ export class NotificationController {
   @Post()
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: false, transform: true }))
   @ApiOperation({
-    summary: 'Recevoir une notification (format Anapath ou service-notification)',
+    summary: 'Recevoir une notification',
+    description:
+      'Accepte le format standard service-notification (recommandé) ou le format legacy Anapath `{ type, title, message }`.',
   })
-  @ApiResponse({ status: 200, description: 'Notification reçue avec succès' })
+  @ApiBody({
+    type: ServiceNotificationInboundDto,
+    description: 'Corps de requête au format standard service-notification',
+    examples: {
+      standard: {
+        summary: 'Format standard (recommandé)',
+        description: 'Format aligné avec tous les services de notification',
+        value: {
+          type: 'MEDICAL_ALERT',
+          motif: 'Patient en détresse',
+          sourceServiceId: 'service-anapath',
+          sourceServiceName: 'Anapath',
+          targetServiceId: 'service-urgence',
+          targetServiceName: 'Urgence',
+          urgence: 2,
+          patientId: 'patient-123',
+          payload: {
+            dossier: 'ANP-456',
+            observation: 'Résultat anatomopathologique disponible',
+          },
+          channels: ['SOUND', 'WEB'],
+        },
+      },
+      legacyAnapath: {
+        summary: 'Format legacy Anapath',
+        description: 'Format interne historique (type, title, message)',
+        value: {
+          type: 'STAT_ALERT',
+          title: '🚨 ALERTE STAT',
+          message: 'Examen extemporané urgent - délai 30 minutes',
+          priority: 'high',
+          source: 'service-notification',
+          metadata: { anapathId: 'ANP-2026-12345' },
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Notification reçue avec succès',
+    type: NotificationReceiveResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Corps de requête invalide' })
   @HttpCode(HttpStatus.OK)
   async receiveNotification(@Body() body: Record<string, unknown>) {
     const data = isServiceNotificationPayload(body)
