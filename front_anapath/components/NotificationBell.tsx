@@ -64,7 +64,7 @@ export default function NotificationBell() {
     }
   }, [isOpen, loadNotifications]);
 
-  const markAsRead = async (id: string, requestId?: string) => {
+  const markAsRead = async (id: string, requestId?: string, notificationType?: string) => {
     const notif = notifications.find((n) => n.id === id);
     if (!notif?.read) {
       try {
@@ -77,9 +77,15 @@ export default function NotificationBell() {
     }
 
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    setIsOpen(false);
 
+    // Navigation selon le type de notification
     if (requestId) {
       router.push(`/worklist/${requestId}`);
+    } else if (notificationType === 'STAT') {
+      router.push('/dashboard');
+    } else if (notificationType === 'Urgent') {
+      router.push('/worklist');
     }
   };
 
@@ -175,7 +181,7 @@ export default function NotificationBell() {
                 <div
                   key={notif.id}
                   className={`p-3 cursor-pointer transition-all ${getNotificationStyle(notif.type)} ${!notif.read ? 'bg-opacity-100' : 'bg-opacity-50'}`}
-                  onClick={() => markAsRead(notif.id, notif.requestId || undefined)}
+                  onClick={() => markAsRead(notif.id, notif.requestId || undefined, notif.type)}
                 >
                   <div className="flex items-start gap-3">
                     <div className="text-xl">{getIcon(notif.title, notif.type)}</div>

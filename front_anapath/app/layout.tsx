@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Manrope } from "next/font/google";
 import "./globals.css";
+import ThemeProvider from '../components/ThemeProvider';
+import { SearchProvider } from '../components/SearchContext'; // ← ajout
 
 const inter = Inter({ 
   subsets: ["latin"], 
@@ -25,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className="light">
+    <html lang="fr">
       <head>
         <meta charSet="UTF-8" />
         <link 
@@ -34,8 +36,12 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.variable} ${manrope.variable} font-body bg-surface text-on-surface antialiased`}>
-        <div className="grain-overlay"></div>
-        {children}
+        <ThemeProvider>
+          <SearchProvider>  {/* ← ajout */}
+            <div className="grain-overlay"></div>
+            {children}
+          </SearchProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

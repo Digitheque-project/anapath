@@ -13,6 +13,8 @@ export enum ExamenType {
   LIQUIDE = 'LIQUIDE',
   BIOPSIE = 'BIOPSIE',
   EXTEMPORANE_STAT = 'EXTEMPORANE_STAT',
+  POS = 'POS',
+  POC = 'POC',
 }
 
 export enum Statut {

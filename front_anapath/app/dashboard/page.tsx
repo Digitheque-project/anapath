@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
+import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
 
 interface AnapathRequest {
@@ -15,18 +16,35 @@ interface AnapathRequest {
 }
 
 export default function DashboardPage() {
+  const { searchQuery } = useSearch();
   const [requests, setRequests] = useState<AnapathRequest[]>([]);
+  const [filteredRequests, setFilteredRequests] = useState<AnapathRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    let filtered = requests;
+    if (searchQuery.trim() !== '') {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(req =>
+        req.anapathId.toLowerCase().includes(query) ||
+        req.patientId.toLowerCase().includes(query) ||
+        req.typeExamen.toLowerCase().includes(query) ||
+        req.statut.toLowerCase().includes(query)
+      );
+    }
+    setFilteredRequests(filtered);
+  }, [searchQuery, requests]);
+
   const fetchData = async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath`);
       setRequests(response.data);
+      setFilteredRequests(response.data);
     } catch (error) {
       console.error('Erreur:', error);
     } finally {
@@ -34,10 +52,23 @@ export default function DashboardPage() {
     }
   };
 
-  const totalExamens = requests.length;
-  const enAttenteSTAT = requests.filter(r => r.statut === 'CREEE' || r.statut === 'EN_ATTENTE').length;
-  const enValidation = requests.filter(r => r.statut === 'RESULTAT_DISPONIBLE').length;
-  const valides = requests.filter(r => r.statut === 'VALIDE').length;
+  const totalExamens = filteredRequests.length;
+  const enAttenteSTAT = filteredRequests.filter(r => r.statut === 'CREEE' || r.statut === 'EN_ATTENTE').length;
+  const enValidation = filteredRequests.filter(r => r.statut === 'RESULTAT_DISPONIBLE').length;
+  const valides = filteredRequests.filter(r => r.statut === 'VALIDE').length;
+
+  const getTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'BIOPSIE': 'Biopsie',
+      'FCV_PAP': 'FCV / Pap test',
+      'CYT0PONCTION': 'Cytoponction',
+      'LIQUIDE': 'Liquide',
+      'EXTEMPORANE_STAT': 'Extemporané',
+      'POS': 'POS',
+      'POC': 'POC',
+    };
+    return labels[type] || type;
+  };
 
   if (loading) {
     return (
@@ -93,11 +124,11 @@ export default function DashboardPage() {
                   <tr><th className="p-4 text-left">ID PARA</th><th className="p-4 text-left">Patient</th><th className="p-4 text-left">Type examen</th><th className="p-4 text-left">Statut</th><th className="p-4 text-left">Date</th></tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/10">
-                  {requests.slice(0, 10).map((req) => (
+                  {filteredRequests.slice(0, 10).map((req) => (
                     <tr key={req.id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="p-4 font-mono font-bold text-primary">{req.anapathId}</td>
                       <td className="p-4 font-medium">{req.patientId}</td>
-                      <td className="p-4"><span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold">{req.typeExamen}</span></td>
+                      <td className="p-4"><span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold">{getTypeLabel(req.typeExamen)}</span></td>
                       <td className="p-4"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${req.statut === 'VALIDE' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{req.statut}</span></td>
                       <td className="p-4 text-slate-500 text-xs">{new Date(req.createdAt).toLocaleDateString('fr-FR')}</td>
                     </tr>

@@ -1,3 +1,4 @@
+/* cspell:ignore wght opsz Csvg Crect Glassmorphism */
 @import 'tailwindcss/base';
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
@@ -37,8 +38,38 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  html.dark body,
+  html[data-theme='dark'] body {
+    background-color: #0f172a;
+    color: #e2e8f0;
+  }
+
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Manrope', sans-serif;
+  }
+
+  /* Dark theme variable overrides - used when html has class 'dark' or data-theme='dark' */
+  html.dark,
+  html[data-theme='dark'] {
+    --primary: #9fc5ff;
+    --primary-container: #1f6fbf;
+    --surface: #071226;
+    --surface-container-lowest: #04111b;
+    --surface-container-low: #081826;
+    --surface-container: #0b2030;
+    --surface-container-high: #0f2736;
+    --surface-container-highest: #122b3d;
+    --on-surface: #e6eef8;
+    --on-surface-variant: #cbd6e4;
+    --outline-variant: #334155;
+    --tertiary: #ff9b9b;
+    --tertiary-container: #7a1a1a;
+    --secondary: #7f98b8;
+    --error: #ffb4b4;
+    --error-container: #5b1414;
+    --primary-fixed: #08345a;
+    --secondary-fixed: #08345a;
+    --tertiary-fixed: #3b1212;
   }
 
   /* Custom scrollbar */
@@ -109,8 +140,8 @@
 /* Glassmorphism utility */
 .glass-effect {
   background: rgba(249, 249, 255, 0.8);
-  backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
 }
 
 /* Gradient primary buttons */

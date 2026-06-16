@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
+import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
 
 interface AnapathRequest {
@@ -18,10 +19,10 @@ interface AnapathRequest {
 }
 
 export default function ArchivesPage() {
+  const { searchQuery } = useSearch();
   const [requests, setRequests] = useState<AnapathRequest[]>([]);
   const [filteredRequests, setFilteredRequests] = useState<AnapathRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
 
   useEffect(() => {
@@ -35,7 +36,8 @@ export default function ArchivesPage() {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(req =>
         req.anapathId.toLowerCase().includes(query) ||
-        req.patientId.toLowerCase().includes(query)
+        req.patientId.toLowerCase().includes(query) ||
+        req.typeExamen.toLowerCase().includes(query)
       );
     }
     setFilteredRequests(filtered);
@@ -55,23 +57,30 @@ export default function ArchivesPage() {
     }
   };
 
+  const getTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'BIOPSIE': 'Biopsie',
+      'FCV_PAP': 'FCV / Pap test',
+      'CYT0PONCTION': 'Cytoponction',
+      'LIQUIDE': 'Liquide',
+      'EXTEMPORANE_STAT': 'Extemporané',
+      'POS': 'POS',
+      'POC': 'POC',
+    };
+    return labels[type] || type;
+  };
+
   const getTypeBadge = (type: string) => {
     const colors: Record<string, string> = {
       'BIOPSIE': 'bg-blue-100 text-blue-700',
       'FCV_PAP': 'bg-purple-100 text-purple-700',
       'CYT0PONCTION': 'bg-green-100 text-green-700',
       'LIQUIDE': 'bg-yellow-100 text-yellow-700',
-      'EXTEMPORANE_STAT': 'bg-red-100 text-red-700'
+      'EXTEMPORANE_STAT': 'bg-red-100 text-red-700',
+      'POS': 'bg-indigo-100 text-indigo-700',
+      'POC': 'bg-pink-100 text-pink-700',
     };
     return colors[type] || 'bg-gray-100 text-gray-700';
-  };
-
-  const getTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      'BIOPSIE': 'Biopsie', 'FCV_PAP': 'FCV / Pap test', 'CYT0PONCTION': 'Cytoponction',
-      'LIQUIDE': 'Liquide', 'EXTEMPORANE_STAT': 'Extemporané'
-    };
-    return labels[type] || type;
   };
 
   if (loading) {
@@ -99,15 +108,12 @@ export default function ArchivesPage() {
           <div className="flex gap-3 mb-6 flex-wrap">
             <button onClick={() => setTypeFilter('all')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${typeFilter === 'all' ? 'bg-primary text-white' : 'bg-white text-slate-600 border border-outline-variant/20'}`}>Tous</button>
             <button onClick={() => setTypeFilter('BIOPSIE')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${typeFilter === 'BIOPSIE' ? 'bg-primary text-white' : 'bg-white text-slate-600 border border-outline-variant/20'}`}>Biopsie</button>
-            <button onClick={() => setTypeFilter('FCV_PAP')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${typeFilter === 'FCV_PAP' ? 'bg-primary text-white' : 'bg-white text-slate-600 border border-outline-variant/20'}`}>FCV / Pap test</button>
+            <button onClick={() => setTypeFilter('FCV_PAP')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${typeFilter === 'FCV_PAP' ? 'bg-primary text-white' : 'bg-white text-slate-600 border border-outline-variant/20'}`}>FCV / Pap</button>
             <button onClick={() => setTypeFilter('CYT0PONCTION')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${typeFilter === 'CYT0PONCTION' ? 'bg-primary text-white' : 'bg-white text-slate-600 border border-outline-variant/20'}`}>Cytoponction</button>
             <button onClick={() => setTypeFilter('LIQUIDE')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${typeFilter === 'LIQUIDE' ? 'bg-primary text-white' : 'bg-white text-slate-600 border border-outline-variant/20'}`}>Liquide</button>
             <button onClick={() => setTypeFilter('EXTEMPORANE_STAT')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${typeFilter === 'EXTEMPORANE_STAT' ? 'bg-primary text-white' : 'bg-white text-slate-600 border border-outline-variant/20'}`}>Extemporané</button>
-          </div>
-
-          <div className="bg-primary/5 p-4 rounded-xl mb-6 flex justify-between items-center">
-            <div><p className="text-sm text-primary font-semibold">Total des archives</p><p className="text-3xl font-extrabold text-primary">{filteredRequests.length}</p></div>
-            <span className="material-symbols-outlined text-primary text-4xl opacity-50">folder_zip</span>
+            <button onClick={() => setTypeFilter('POS')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${typeFilter === 'POS' ? 'bg-primary text-white' : 'bg-white text-slate-600 border border-outline-variant/20'}`}>POS</button>
+            <button onClick={() => setTypeFilter('POC')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${typeFilter === 'POC' ? 'bg-primary text-white' : 'bg-white text-slate-600 border border-outline-variant/20'}`}>POC</button>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-outline-variant/20">

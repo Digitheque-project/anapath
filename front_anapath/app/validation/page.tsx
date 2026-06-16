@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
+import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
 
 interface AnapathRequest {
@@ -18,7 +19,9 @@ interface AnapathRequest {
 
 export default function ValidationPage() {
   const router = useRouter();
+  const { searchQuery } = useSearch();
   const [requests, setRequests] = useState<AnapathRequest[]>([]);
+  const [filteredRequests, setFilteredRequests] = useState<AnapathRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<AnapathRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -29,6 +32,28 @@ export default function ValidationPage() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    let filtered = requests;
+    if (searchQuery.trim() !== '') {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(req =>
+        req.anapathId.toLowerCase().includes(query) ||
+        req.patientId.toLowerCase().includes(query) ||
+        req.typeExamen.toLowerCase().includes(query)
+      );
+    }
+    setFilteredRequests(filtered);
+    if (filtered.length > 0 && !selectedRequest) {
+      setSelectedRequest(filtered[0]);
+      if (filtered[0].resultat) {
+        setResultData({
+          details: filtered[0].resultat.details || '',
+          conclusion: filtered[0].resultat.conclusion || ''
+        });
+      }
+    }
+  }, [searchQuery, requests]);
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -37,7 +62,8 @@ export default function ValidationPage() {
         req.statut === 'CREEE' || req.statut === 'EN_ATTENTE'
       );
       setRequests(pendingRequests);
-      if (pendingRequests.length > 0 && !selectedRequest) {
+      setFilteredRequests(pendingRequests);
+      if (pendingRequests.length > 0) {
         setSelectedRequest(pendingRequests[0]);
         if (pendingRequests[0].resultat) {
           setResultData({
@@ -100,9 +126,9 @@ export default function ValidationPage() {
       await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${selectedRequest.id}/validate`, signature);
       alert('Demande validée avec succès !');
       await fetchData();
-      if (requests.length > 1) {
-        setSelectedRequest(requests[1]);
-        loadRequest(requests[1].id);
+      if (filteredRequests.length > 1) {
+        setSelectedRequest(filteredRequests[1]);
+        loadRequest(filteredRequests[1].id);
       } else {
         setSelectedRequest(null);
         setResultData({ details: '', conclusion: '' });
@@ -114,6 +140,19 @@ export default function ValidationPage() {
     } finally {
       setUpdating(false);
     }
+  };
+
+  const getTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'BIOPSIE': 'Biopsie',
+      'FCV_PAP': 'FCV / Pap test',
+      'CYT0PONCTION': 'Cytoponction',
+      'LIQUIDE': 'Liquide',
+      'EXTEMPORANE_STAT': 'Extemporané',
+      'POS': 'POS',
+      'POC': 'POC',
+    };
+    return labels[type] || type;
   };
 
   if (loading) {
@@ -136,7 +175,7 @@ export default function ValidationPage() {
         <TopBar />
         
         <div className="flex-1 p-6 w-full max-w-6xl mx-auto">
-          {requests.length > 0 ? (
+          {filteredRequests.length > 0 ? (
             <div className="mb-6">
               <label className="text-xs font-bold text-slate-400 uppercase">Demande à traiter</label>
               <select
@@ -144,9 +183,9 @@ export default function ValidationPage() {
                 onChange={(e) => loadRequest(e.target.value)}
                 className="w-full mt-1 p-3 bg-white border border-outline-variant/30 rounded-lg text-sm"
               >
-                {requests.map((req) => (
+                {filteredRequests.map((req) => (
                   <option key={req.id} value={req.id}>
-                    {req.anapathId} - Patient: {req.patientId} - {req.typeExamen}
+                    {req.anapathId} - Patient: {req.patientId} - {getTypeLabel(req.typeExamen)}
                   </option>
                 ))}
               </select>
@@ -166,7 +205,7 @@ export default function ValidationPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div><label className="text-xs text-slate-400">Patient ID</label><p className="font-semibold">{selectedRequest.patientId}</p></div>
                     <div><label className="text-xs text-slate-400">ID PARA</label><p className="font-mono text-primary font-bold">{selectedRequest.anapathId}</p></div>
-                    <div><label className="text-xs text-slate-400">Type examen</label><p className="font-semibold">{selectedRequest.typeExamen}</p></div>
+                    <div><label className="text-xs text-slate-400">Type examen</label><p className="font-semibold">{getTypeLabel(selectedRequest.typeExamen)}</p></div>
                     <div><label className="text-xs text-slate-400">Site prélèvement</label><p className="font-semibold">{selectedRequest.prelevement?.site || '-'}</p></div>
                   </div>
                 </div>

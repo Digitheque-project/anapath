@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
+import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
 
 interface AnapathRequest {
@@ -17,10 +18,10 @@ interface AnapathRequest {
 }
 
 export default function WorklistPage() {
+  const { searchQuery } = useSearch();
   const [requests, setRequests] = useState<AnapathRequest[]>([]);
   const [filteredRequests, setFilteredRequests] = useState<AnapathRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState('all');
 
   useEffect(() => {
@@ -29,7 +30,6 @@ export default function WorklistPage() {
 
   useEffect(() => {
     let filtered = requests;
-    
     if (filter === 'pending') filtered = filtered.filter(req => req.statut === 'CREEE' || req.statut === 'EN_ATTENTE');
     if (filter === 'validated') filtered = filtered.filter(req => req.statut === 'VALIDE');
     
@@ -38,10 +38,10 @@ export default function WorklistPage() {
       filtered = filtered.filter(req =>
         req.anapathId.toLowerCase().includes(query) ||
         req.patientId.toLowerCase().includes(query) ||
-        req.typeExamen.toLowerCase().includes(query)
+        req.typeExamen.toLowerCase().includes(query) ||
+        req.statut.toLowerCase().includes(query)
       );
     }
-    
     setFilteredRequests(filtered);
   }, [searchQuery, filter, requests]);
 
@@ -56,6 +56,19 @@ export default function WorklistPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'BIOPSIE': 'Biopsie',
+      'FCV_PAP': 'FCV / Pap test',
+      'CYT0PONCTION': 'Cytoponction',
+      'LIQUIDE': 'Liquide',
+      'EXTEMPORANE_STAT': 'Extemporané',
+      'POS': 'POS',
+      'POC': 'POC',
+    };
+    return labels[type] || type;
   };
 
   const getStatusBadge = (statut: string) => {
@@ -109,7 +122,7 @@ export default function WorklistPage() {
                     <tr key={req.id} className="hover:bg-slate-50/80 transition-colors group">
                       <td className="p-4 font-mono font-bold text-primary">{req.anapathId}</td>
                       <td className="p-4 font-medium">{req.patientId}</td>
-                      <td className="p-4"><span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold">{req.typeExamen}</span></td>
+                      <td className="p-4"><span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold">{getTypeLabel(req.typeExamen)}</span></td>
                       <td className="p-4 text-xs text-slate-500">{req.prelevement?.site || '-'}</td>
                       <td className="p-4">{getStatusBadge(req.statut)}</td>
                       <td className="p-4 text-slate-500 text-xs">{new Date(req.createdAt).toLocaleDateString('fr-FR')}</td>
@@ -125,7 +138,6 @@ export default function WorklistPage() {
               {filteredRequests.length === 0 && <div className="text-center py-8 text-slate-400">Aucun résultat trouvé</div>}
             </div>
           </div>
-
           <div className="mt-6 text-center text-xs text-slate-400">Total: {filteredRequests.length} demande(s)</div>
         </div>
       </main>

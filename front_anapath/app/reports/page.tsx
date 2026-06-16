@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
+import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -27,7 +28,9 @@ interface Statistics {
 }
 
 export default function ReportsPage() {
+  const { searchQuery } = useSearch();
   const [requests, setRequests] = useState<AnapathRequest[]>([]);
+  const [filteredRequests, setFilteredRequests] = useState<AnapathRequest[]>([]);
   const [stats, setStats] = useState<Statistics>({
     total: 0, byType: {}, byStatus: {}, monthlyData: [], topDiagnostics: [], tatMoyen: 0
   });
@@ -38,12 +41,27 @@ export default function ReportsPage() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    let filtered = requests;
+    if (searchQuery.trim() !== '') {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(req =>
+        req.anapathId.toLowerCase().includes(query) ||
+        req.patientId.toLowerCase().includes(query) ||
+        req.typeExamen.toLowerCase().includes(query)
+      );
+    }
+    setFilteredRequests(filtered);
+    calculateStatistics(filtered);
+  }, [searchQuery, requests]);
+
   const fetchData = async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath`);
       const data = response.data;
       setRequests(data);
+      setFilteredRequests(data);
       calculateStatistics(data);
     } catch (error) {
       console.error('Erreur:', error);
@@ -99,35 +117,119 @@ export default function ReportsPage() {
   const exportToPDF = () => {
     const doc = new jsPDF();
     const date = new Date().toLocaleDateString('fr-FR');
+    let yOffset = 20;
+
+    // Titre
     doc.setFontSize(18);
     doc.setTextColor(0, 71, 141);
-    doc.text('Rapport Anapath - Statistiques', 14, 20);
+    doc.text('Rapport Anapath - Statistiques', 14, yOffset);
+    yOffset += 10;
+
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
-    doc.text(`Généré le ${date}`, 14, 28);
+    doc.text(`Généré le ${date}`, 14, yOffset);
+    yOffset += 8;
+
+    // === 1. KPIs ===
     doc.setFontSize(12);
     doc.setTextColor(0, 0, 0);
-    doc.text(`Total examens: ${stats.total}`, 14, 45);
-    doc.text(`En attente: ${stats.byStatus['CREEE'] || 0}`, 14, 53);
-    doc.text(`Validés: ${stats.byStatus['VALIDE'] || 0}`, 14, 61);
-    doc.text(`Délai moyen TAT: ${stats.tatMoyen.toFixed(1)} jours`, 14, 69);
+    doc.text(`Total examens : ${stats.total}`, 14, yOffset);
+    yOffset += 6;
+    doc.text(`En attente : ${stats.byStatus['CREEE'] || 0}`, 14, yOffset);
+    yOffset += 6;
+    doc.text(`Validés : ${stats.byStatus['VALIDE'] || 0}`, 14, yOffset);
+    yOffset += 6;
+    doc.text(`Délai moyen TAT : ${stats.tatMoyen.toFixed(1)} jours`, 14, yOffset);
+    yOffset += 10;
+
+    // === 2. Volume mensuel ===
     doc.setFontSize(14);
     doc.setTextColor(0, 71, 141);
-    doc.text('Liste des demandes', 14, 85);
-    
-    const tableData = requests.map(req => [
-      req.anapathId, req.patientId, req.typeExamen, req.statut,
+    doc.text('Volume mensuel', 14, yOffset);
+    yOffset += 6;
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+
+    const monthlyTable = stats.monthlyData.map(item => [item.month, item.count.toString()]);
+    autoTable(doc, {
+      startY: yOffset,
+      head: [['Mois', 'Nombre']],
+      body: monthlyTable,
+      theme: 'plain',
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [0, 71, 141], textColor: [255, 255, 255] },
+      margin: { left: 14, right: 14 },
+    });
+    yOffset = (doc as any).lastAutoTable.finalY + 8;
+
+    // === 3. Répartition par type ===
+    doc.setFontSize(14);
+    doc.setTextColor(0, 71, 141);
+    doc.text('Répartition par type d\'examen', 14, yOffset);
+    yOffset += 6;
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+
+    const typeRows = Object.entries(stats.byType).map(([type, count]) => {
+      const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+      return [type, count.toString(), `${pct}%`];
+    });
+    autoTable(doc, {
+      startY: yOffset,
+      head: [['Type', 'Nombre', 'Pourcentage']],
+      body: typeRows,
+      theme: 'plain',
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [0, 71, 141], textColor: [255, 255, 255] },
+      margin: { left: 14, right: 14 },
+    });
+    yOffset = (doc as any).lastAutoTable.finalY + 8;
+
+    // === 4. Top diagnostics CIM-10 ===
+    doc.setFontSize(14);
+    doc.setTextColor(0, 71, 141);
+    doc.text('Top diagnostics CIM-10', 14, yOffset);
+    yOffset += 6;
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+
+    const diagRows = stats.topDiagnostics.map(d => [d.code, d.name, d.count.toString()]);
+    autoTable(doc, {
+      startY: yOffset,
+      head: [['Code', 'Diagnostic', 'Occurrences']],
+      body: diagRows,
+      theme: 'plain',
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [0, 71, 141], textColor: [255, 255, 255] },
+      margin: { left: 14, right: 14 },
+    });
+    yOffset = (doc as any).lastAutoTable.finalY + 8;
+
+    // === 5. Liste des demandes ===
+    doc.addPage();
+    doc.setFontSize(14);
+    doc.setTextColor(0, 71, 141);
+    doc.text('Liste des demandes', 14, 20);
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+
+    const tableData = filteredRequests.map(req => [
+      req.anapathId,
+      req.patientId,
+      req.typeExamen,
+      req.statut,
       new Date(req.createdAt).toLocaleDateString('fr-FR')
     ]);
-    
+
     autoTable(doc, {
-      startY: 90,
-      head: [['ID PARA', 'Patient', 'Type examen', 'Statut', 'Date']],
+      startY: 30,
+      head: [['ID PARA', 'Patient', 'Type', 'Statut', 'Date']],
       body: tableData,
       theme: 'striped',
       headStyles: { fillColor: [0, 71, 141], textColor: [255, 255, 255] },
       margin: { left: 14, right: 14 },
     });
+
     doc.save(`rapport-anapath-${date}.pdf`);
   };
 
@@ -138,6 +240,19 @@ export default function ReportsPage() {
   };
 
   const maxCount = Math.max(...stats.monthlyData.map(d => d.count), 1);
+
+  const getTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      'BIOPSIE': 'Biopsie',
+      'FCV_PAP': 'FCV / Pap test',
+      'CYT0PONCTION': 'Cytoponction',
+      'LIQUIDE': 'Liquide',
+      'EXTEMPORANE_STAT': 'Extemporané',
+      'POS': 'POS',
+      'POC': 'POC',
+    };
+    return labels[type] || type;
+  };
 
   if (loading) {
     return (
@@ -207,7 +322,7 @@ export default function ReportsPage() {
                 const percentage = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
                 return (
                   <div key={type} className="mb-3">
-                    <div className="flex justify-between text-sm mb-1"><span className="font-medium">{type}</span><span className="font-bold text-primary">{count} ({percentage}%)</span></div>
+                    <div className="flex justify-between text-sm mb-1"><span className="font-medium">{getTypeLabel(type)}</span><span className="font-bold text-primary">{count} ({percentage}%)</span></div>
                     <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div className="bg-primary h-2 rounded-full" style={{ width: `${percentage}%` }}></div></div>
                   </div>
                 );
