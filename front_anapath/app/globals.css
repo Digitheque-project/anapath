@@ -175,3 +175,24 @@
   background: var(--surface-container);
   border-radius: 0.75rem;
 }
+
+/* ============================================
+   AMÉLIORATION : Contraste des champs de formulaire
+   ============================================ */
+input, textarea, select {
+  color: #000000 !important;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #9ca3af !important; /* Gris clair pour les placeholders */
+}
+
+/* Garder le texte en blanc sur fond bleu pour les boutons */
+button {
+  color: inherit;
+}
+
+/* Pour le select, s'assurer que l'option sélectionnée est en noir */
+select option {
+  color: #000000 !important;
+}

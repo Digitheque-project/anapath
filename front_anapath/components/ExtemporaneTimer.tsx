@@ -72,7 +72,7 @@ export default function ExtemporaneTimer({
       setTimeLeft(seconds);
 
       // Alerte à 5 minutes (300 secondes) – déclenchée une seule fois
-      if (seconds <= 1500 && seconds > 0 && !alertSent) {
+      if (seconds <= 60 && seconds > 0 && !alertSent) {
         setAlertSent(true);
         // Jouer le son d'alerte
         if (audioRef.current) {
