@@ -172,12 +172,11 @@ export default function WorklistDetailPage() {
           {request.isExtemporane && request.statut !== 'VALIDE' && (
             <div className="mb-6">
               <ExtemporaneTimer 
-                startTime={request.createdAt}
-                requestId={request.id}
-                anapathId={request.anapathId}
-                patientId={request.patientId}
-                onTimeOut={() => console.log('Temps écoulé')}
-                onAlert={() => console.log('Alerte 5 min')}
+  startTime={request.createdAt}
+  requestId={request.id}
+  anapathId={request.anapathId}
+  patientId={request.patientId}
+  onTimeOut={() => console.log('Temps écoulé')}
               />
             </div>
           )}
