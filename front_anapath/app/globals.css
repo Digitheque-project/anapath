@@ -196,3 +196,17 @@ button {
 select option {
   color: #000000 !important;
 }
+
+/* ============================================
+   AMÉLIORATION : Contraste des labels (options radio/checkbox)
+   ============================================ */
+/* Forcer le texte des labels qui contiennent des inputs radio ou checkbox en noir */
+label:has(input[type="radio"]), 
+label:has(input[type="checkbox"]) {
+  color: #000000 !important;
+}
+
+/* Exception pour les titres de section (restent en gris) */
+label.text-xs {
+  color: #6b7280 !important; /* Gris pour les petits labels (titres) */
+}
