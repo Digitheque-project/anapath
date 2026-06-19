@@ -87,7 +87,7 @@ export default function ExtemporaneTimer({
       setTimeLeft(seconds);
 
       // Alerte à 5 minutes (300 secondes) – déclenchée une seule fois
-      if (seconds <= 300 && seconds > 0 && !alertSent) {
+      if (seconds <= 1680 && seconds > 0 && !alertSent) {
         setAlertSent(true);
         playBeep(); // Jouer le son
         sendNotification(); // Envoyer la notification au backend pour la cloche
