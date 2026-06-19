@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
 
 interface ExtemporaneTimerProps {
   startTime: Date | string;
@@ -12,31 +13,60 @@ interface ExtemporaneTimerProps {
 
 export default function ExtemporaneTimer({ 
   startTime, 
-  onTimeOut,
-  anapathId = '',
-  patientId = ''
+  requestId, 
+  anapathId, 
+  patientId, 
+  onTimeOut 
 }: ExtemporaneTimerProps) {
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [isExpired, setIsExpired] = useState(false);
   const [alertSent, setAlertSent] = useState(false);
-  const [timeoutAlertSent, setTimeoutAlertSent] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Demander la permission pour les notifications au chargement
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
+  // Fonction pour jouer un son (bip) via Web Audio API
+  const playBeep = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.5);
+    } catch (e) {
+      console.warn('Impossible de jouer le son :', e);
     }
-    // Charger le son
-    audioRef.current = new Audio('/sounds/alert.mp3');
-    // Fallback : si le fichier n'existe pas, on utilise un son généré dynamiquement
-    audioRef.current.onerror = () => {
-      console.warn('⚠️ Fichier son introuvable, utilisation d\'un son de secours');
-      audioRef.current = new Audio('data:audio/wav;base64,UklGRlQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAABkAAAAZAAAAGQAAABkAAAAZAAAAGQAAABkAAAAZAAAAGQAAABkAAAAZAAAAGQAAABkAAAAZAAAAGQAAABkAAAA');
-    };
-  }, []);
+  };
+
+  // Fonction pour envoyer la notification au backend (pour qu'elle apparaisse dans la cloche)
+  const sendNotification = async () => {
+    try {
+      const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/notifications`, {
+        type: 'STAT_ALERT',
+        title: '🚨 ALERTE STAT',
+        message: `Il reste 5 minutes pour l'examen ${anapathId || ''} - Patient ${patientId || ''}`,
+        priority: 'high',
+        source: 'Anapath',
+        metadata: { 
+          anapathId, 
+          patientId, 
+          requestId,
+          timestamp: new Date().toISOString()
+        }
+      });
+      console.log('✅ Notification STAT envoyée avec succès');
+      
+      // Déclencher un événement personnalisé pour forcer le rafraîchissement de la cloche
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('stat-alert'));
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'envoi de la notification STAT:', error);
+    }
+  };
 
   useEffect(() => {
     const start = new Date(startTime);
@@ -49,22 +79,7 @@ export default function ExtemporaneTimer({
       if (remaining <= 0) {
         setTimeLeft(0);
         setIsExpired(true);
-        if (!timeoutAlertSent) {
-          setTimeoutAlertSent(true);
-          // Jouer le son d'expiration
-          if (audioRef.current) {
-            audioRef.current.play().catch(() => {});
-          }
-          // Notification système
-          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification('⏰ TEMPS ÉCOULÉ !', {
-              body: `L'examen ${anapathId} (patient ${patientId}) a dépassé le délai de 30 minutes.`,
-              icon: '/icons/icon-192.png',
-              requireInteraction: true,
-            });
-          }
-          if (onTimeOut) onTimeOut();
-        }
+        if (onTimeOut) onTimeOut();
         return;
       }
       
@@ -72,34 +87,17 @@ export default function ExtemporaneTimer({
       setTimeLeft(seconds);
 
       // Alerte à 5 minutes (300 secondes) – déclenchée une seule fois
-      if (seconds <= 60 && seconds > 0 && !alertSent) {
+      if (seconds <= 300 && seconds > 0 && !alertSent) {
         setAlertSent(true);
-        // Jouer le son d'alerte
-        if (audioRef.current) {
-          audioRef.current.play().catch(() => {});
-        }
-        // Notification système
-        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-          new Notification('⚠️ ALERTE 5 MINUTES', {
-            body: `Il reste 5 minutes pour l'examen ${anapathId} (patient ${patientId}).`,
-            icon: '/icons/icon-192.png',
-            requireInteraction: true,
-          });
-        }
-        // Notification visuelle dans l'UI
-        // On peut aussi déclencher un événement personnalisé
-        const event = new CustomEvent('stat-alert', { 
-          detail: { message: '5 minutes restantes', anapathId, patientId }
-        });
-        window.dispatchEvent(event);
+        playBeep(); // Jouer le son
+        sendNotification(); // Envoyer la notification au backend pour la cloche
       }
     };
 
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
-    
     return () => clearInterval(interval);
-  }, [startTime, onTimeOut, alertSent, timeoutAlertSent, anapathId, patientId]);
+  }, [startTime, onTimeOut, alertSent, anapathId, patientId, requestId]);
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -113,14 +111,12 @@ export default function ExtemporaneTimer({
     return 'bg-primary text-white';
   };
 
-  // Ne pas afficher le timer si le temps est écoulé (on affiche un message d'erreur)
   if (timeLeft === 0 && isExpired) {
     return (
-      <div className="bg-red-800 text-white p-4 rounded-lg text-center shadow-lg animate-pulse">
+      <div className="bg-red-800 text-white p-4 rounded-lg text-center">
         <span className="material-symbols-outlined text-3xl">timer_off</span>
-        <p className="font-bold text-xl mt-1">⏰ TEMPS ÉCOULÉ</p>
-        <p className="text-sm opacity-80">Le délai de 30 minutes est dépassé</p>
-        <p className="text-xs mt-2 opacity-60">Alerte envoyée au service demandeur</p>
+        <p className="font-bold mt-1">TEMPS ÉCOULÉ</p>
+        <p className="text-xs">Le délai de 30 minutes est dépassé</p>
       </div>
     );
   }
@@ -128,19 +124,12 @@ export default function ExtemporaneTimer({
   return (
     <div className={`${getColor()} p-4 rounded-lg text-center transition-all duration-300 shadow-lg`}>
       <div className="flex items-center justify-center gap-2">
-        <span className="material-symbols-outlined text-2xl animate-pulse">timer</span>
+        <span className="material-symbols-outlined text-2xl">timer</span>
         <span className="font-mono text-3xl font-bold tracking-wider">
           {formatTime(timeLeft)}
         </span>
       </div>
-      <p className="text-sm mt-1 font-medium">
-        {timeLeft < 600 ? '🚨 ALERTE : Moins de 10 minutes !' : 'Temps restant pour examen STAT'}
-      </p>
-      {timeLeft < 600 && timeLeft > 0 && (
-        <div className="mt-2 text-xs animate-pulse bg-white/20 px-3 py-1 rounded-full inline-block">
-          ⚡ Traitement prioritaire !
-        </div>
-      )}
+      <p className="text-sm mt-1 font-medium">Temps restant pour examen STAT</p>
     </div>
   );
 }
