@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
+import { statusLabels, statusColors } from '@/lib/statusLabels';
 
 interface AnapathRequest {
   id: string;
@@ -59,13 +60,13 @@ export default function DashboardPage() {
 
   const getTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
-      'BIOPSIE': 'Biopsie',
-      'FCV_PAP': 'FCV / Pap test',
-      'CYT0PONCTION': 'Cytoponction',
-      'LIQUIDE': 'Liquide',
-      'EXTEMPORANE_STAT': 'Extemporané',
-      'POS': 'POS',
-      'POC': 'POC',
+      BIOPSIE: 'Biopsie',
+      FCV_PAP: 'FCV / Pap test',
+      CYT0PONCTION: 'Cytoponction',
+      LIQUIDE: 'Liquide',
+      EXTEMPORANE_STAT: 'Extemporané',
+      POS: 'POS',
+      POC: 'POC',
     };
     return labels[type] || type;
   };
@@ -85,16 +86,13 @@ export default function DashboardPage() {
     <div className="flex min-h-screen bg-[#f9f9ff] text-[#191c21]">
       <div className="fixed inset-0 grain-overlay z-[60] pointer-events-none"></div>
       <Sidebar />
-      
       <main className="flex-1 ml-64 min-h-screen flex flex-col w-[calc(100%-256px)]">
         <TopBar />
-        
         <div className="flex-1 p-6 w-full">
           <div className="mb-6">
             <h2 className="text-2xl font-extrabold text-[#191c21] tracking-tight">Tableau de bord</h2>
             <p className="text-slate-500 text-sm mt-1">Vue d'ensemble de l'activité du laboratoire</p>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
             <div className="bg-white p-5 rounded-xl shadow-sm border border-outline-variant/20 flex justify-between items-start">
               <div><p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Total examens</p><p className="text-3xl font-extrabold text-primary">{totalExamens}</p></div>
@@ -113,7 +111,6 @@ export default function DashboardPage() {
               <span className="material-symbols-outlined text-primary text-3xl">verified</span>
             </div>
           </div>
-
           <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-outline-variant/20">
             <div className="p-5 border-b border-outline-variant/20">
               <h3 className="font-bold text-lg">Dernières demandes</h3>
@@ -129,7 +126,7 @@ export default function DashboardPage() {
                       <td className="p-4 font-mono font-bold text-primary">{req.anapathId}</td>
                       <td className="p-4 font-medium">{req.patientId}</td>
                       <td className="p-4"><span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold">{getTypeLabel(req.typeExamen)}</span></td>
-                      <td className="p-4"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${req.statut === 'VALIDE' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{req.statut}</span></td>
+                      <td className="p-4"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${statusColors[req.statut] || 'bg-gray-100 text-gray-700'}`}>{statusLabels[req.statut] || req.statut}</span></td>
                       <td className="p-4 text-slate-500 text-xs">{new Date(req.createdAt).toLocaleDateString('fr-FR')}</td>
                     </tr>
                   ))}

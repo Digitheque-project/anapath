@@ -6,6 +6,7 @@ import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
+import { statusLabels, statusColors } from '@/lib/statusLabels';
 
 interface AnapathRequest {
   id: string;
@@ -58,7 +59,7 @@ export default function ValidationPage() {
     try {
       setLoading(true);
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath`);
-      const pendingRequests = response.data.filter((req: AnapathRequest) => 
+      const pendingRequests = response.data.filter((req: AnapathRequest) =>
         req.statut === 'CREEE' || req.statut === 'EN_ATTENTE'
       );
       setRequests(pendingRequests);
@@ -144,13 +145,13 @@ export default function ValidationPage() {
 
   const getTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
-      'BIOPSIE': 'Biopsie',
-      'FCV_PAP': 'FCV / Pap test',
-      'CYT0PONCTION': 'Cytoponction',
-      'LIQUIDE': 'Liquide',
-      'EXTEMPORANE_STAT': 'Extemporané',
-      'POS': 'POS',
-      'POC': 'POC',
+      BIOPSIE: 'Biopsie',
+      FCV_PAP: 'FCV / Pap test',
+      CYT0PONCTION: 'Cytoponction',
+      LIQUIDE: 'Liquide',
+      EXTEMPORANE_STAT: 'Extemporané',
+      POS: 'POS',
+      POC: 'POC',
     };
     return labels[type] || type;
   };
@@ -170,10 +171,8 @@ export default function ValidationPage() {
     <div className="flex min-h-screen bg-[#f9f9ff] text-[#191c21]">
       <div className="fixed inset-0 grain-overlay z-[60] pointer-events-none"></div>
       <Sidebar />
-      
       <main className="flex-1 ml-64 min-h-screen flex flex-col w-[calc(100%-256px)]">
         <TopBar />
-        
         <div className="flex-1 p-6 w-full max-w-6xl mx-auto">
           {filteredRequests.length > 0 ? (
             <div className="mb-6">
@@ -196,7 +195,6 @@ export default function ValidationPage() {
               <p className="text-green-700 font-semibold mt-2">Aucune demande en attente de validation</p>
             </div>
           )}
-
           {selectedRequest && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
@@ -209,7 +207,6 @@ export default function ValidationPage() {
                     <div><label className="text-xs text-slate-400">Site prélèvement</label><p className="font-semibold">{selectedRequest.prelevement?.site || '-'}</p></div>
                   </div>
                 </div>
-
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20">
                   <h3 className="font-bold text-primary mb-4">🔬 Compte-rendu d'analyse</h3>
                   <div className="space-y-4">
@@ -233,13 +230,16 @@ export default function ValidationPage() {
                         placeholder="Résumé final du diagnostic..."
                       />
                     </div>
-                    <button onClick={handleSaveResult} disabled={updating} className="px-6 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:opacity-90 transition">
+                    <button
+                      onClick={handleSaveResult}
+                      disabled={updating}
+                      className="px-6 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:opacity-90 transition"
+                    >
                       {updating ? 'Sauvegarde...' : '💾 Sauvegarder le résultat'}
                     </button>
                   </div>
                 </div>
               </div>
-
               <div className="space-y-6">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20">
                   <h3 className="font-bold text-primary mb-4">✍️ Signature numérique</h3>
@@ -274,8 +274,10 @@ export default function ValidationPage() {
                       }`}
                     >
                       <span className="material-symbols-outlined text-sm">verified</span>
-                      {selectedRequest.statut === 'RESULTAT_DISPONIBLE' 
-                        ? (updating ? 'Traitement...' : 'Valider et signer (immuable)')
+                      {selectedRequest.statut === 'RESULTAT_DISPONIBLE'
+                        ? updating
+                          ? 'Traitement...'
+                          : 'Valider et signer (immuable)'
                         : 'Sauvegardez d\'abord le résultat'}
                     </button>
                   </div>

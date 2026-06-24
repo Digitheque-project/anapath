@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import ExtemporaneTimer from '@/components/ExtemporaneTimer';
 import axios from 'axios';
+import { statusLabels, statusColors } from '@/lib/statusLabels';
 
 interface AnapathRequest {
   id: string;
@@ -109,18 +110,6 @@ export default function WorklistDetailPage() {
     }
   };
 
-  const getStatusBadge = () => {
-    if (!request) return null;
-    switch (request.statut) {
-      case 'VALIDE':
-        return <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">✓ Validé</span>;
-      case 'RESULTAT_DISPONIBLE':
-        return <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold rounded-full">📋 Résultat disponible</span>;
-      default:
-        return <span className="px-3 py-1 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">⏳ En attente</span>;
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex min-h-screen bg-[#f9f9ff]">
@@ -147,9 +136,7 @@ export default function WorklistDetailPage() {
     <div className="flex min-h-screen bg-[#f9f9ff] text-[#191c21]">
       <div className="fixed inset-0 grain-overlay z-[60] pointer-events-none"></div>
       <Sidebar />
-
       <main className="flex-1 ml-64 min-h-screen flex flex-col w-[calc(100%-256px)]">
-        
         <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl flex justify-between items-center px-6 py-3 shadow-sm">
           <div className="flex items-center gap-4">
             <Link href="/worklist" className="flex items-center gap-2 text-primary text-sm hover:underline">
@@ -157,7 +144,9 @@ export default function WorklistDetailPage() {
               Retour
             </Link>
             <h2 className="text-lg font-black text-blue-900">Détail de la demande</h2>
-            {getStatusBadge()}
+            <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusColors[request.statut] || 'bg-gray-100 text-gray-700'}`}>
+              {statusLabels[request.statut] || request.statut}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-[#00478d]/10 flex items-center justify-center">
@@ -167,21 +156,18 @@ export default function WorklistDetailPage() {
         </header>
 
         <div className="flex-1 p-6 w-full max-w-5xl mx-auto">
-          
-          {/* Minuteur Extemporané STAT - Placé APRÈS avoir vérifié que request existe */}
           {request.isExtemporane && request.statut !== 'VALIDE' && (
             <div className="mb-6">
-              <ExtemporaneTimer 
-  startTime={request.createdAt}
-  requestId={request.id}
-  anapathId={request.anapathId}
-  patientId={request.patientId}
-  onTimeOut={() => console.log('Temps écoulé')}
+              <ExtemporaneTimer
+                startTime={request.createdAt}
+                requestId={request.id}
+                anapathId={request.anapathId}
+                patientId={request.patientId}
+                onTimeOut={() => console.log('Temps écoulé')}
               />
             </div>
           )}
 
-          {/* Patient Info */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-6">
             <div className="flex items-start justify-between">
               <div>
@@ -201,7 +187,6 @@ export default function WorklistDetailPage() {
             </div>
           </div>
 
-          {/* Prélèvement */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-6">
             <h4 className="font-bold text-primary mb-3">📋 Prélèvement</h4>
             <div className="grid grid-cols-2 gap-4">
@@ -210,7 +195,6 @@ export default function WorklistDetailPage() {
             </div>
           </div>
 
-          {/* Résultat */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-6">
             <h4 className="font-bold text-primary mb-3">🔬 Compte-rendu d'analyse</h4>
             <div className="space-y-4">
@@ -248,7 +232,6 @@ export default function WorklistDetailPage() {
             </div>
           </div>
 
-          {/* Signature */}
           {request.statut !== 'VALIDE' && request.statut === 'RESULTAT_DISPONIBLE' && (
             <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-6">
               <h4 className="font-bold text-primary mb-3">✍️ Signature numérique</h4>
@@ -285,7 +268,6 @@ export default function WorklistDetailPage() {
             </div>
           )}
 
-          {/* Info validation */}
           {request.statut === 'VALIDE' && (
             <div className="bg-green-50 p-6 rounded-xl border border-green-200">
               <h4 className="font-bold text-green-700 mb-3">✅ Demande validée</h4>

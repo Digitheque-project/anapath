@@ -59,26 +59,26 @@ export default function ArchivesPage() {
 
   const getTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
-      'BIOPSIE': 'Biopsie',
-      'FCV_PAP': 'FCV / Pap test',
-      'CYT0PONCTION': 'Cytoponction',
-      'LIQUIDE': 'Liquide',
-      'EXTEMPORANE_STAT': 'Extemporané',
-      'POS': 'POS',
-      'POC': 'POC',
+      BIOPSIE: 'Biopsie',
+      FCV_PAP: 'FCV / Pap test',
+      CYT0PONCTION: 'Cytoponction',
+      LIQUIDE: 'Liquide',
+      EXTEMPORANE_STAT: 'Extemporané',
+      POS: 'POS',
+      POC: 'POC',
     };
     return labels[type] || type;
   };
 
   const getTypeBadge = (type: string) => {
     const colors: Record<string, string> = {
-      'BIOPSIE': 'bg-blue-100 text-blue-700',
-      'FCV_PAP': 'bg-purple-100 text-purple-700',
-      'CYT0PONCTION': 'bg-green-100 text-green-700',
-      'LIQUIDE': 'bg-yellow-100 text-yellow-700',
-      'EXTEMPORANE_STAT': 'bg-red-100 text-red-700',
-      'POS': 'bg-indigo-100 text-indigo-700',
-      'POC': 'bg-pink-100 text-pink-700',
+      BIOPSIE: 'bg-blue-100 text-blue-700',
+      FCV_PAP: 'bg-purple-100 text-purple-700',
+      CYT0PONCTION: 'bg-green-100 text-green-700',
+      LIQUIDE: 'bg-yellow-100 text-yellow-700',
+      EXTEMPORANE_STAT: 'bg-red-100 text-red-700',
+      POS: 'bg-indigo-100 text-indigo-700',
+      POC: 'bg-pink-100 text-pink-700',
     };
     return colors[type] || 'bg-gray-100 text-gray-700';
   };
@@ -98,13 +98,10 @@ export default function ArchivesPage() {
     <div className="flex min-h-screen bg-[#f9f9ff] text-[#191c21]">
       <div className="fixed inset-0 grain-overlay z-[60] pointer-events-none"></div>
       <Sidebar />
-      
       <main className="flex-1 ml-64 min-h-screen flex flex-col w-[calc(100%-256px)]">
         <TopBar />
-        
         <div className="flex-1 p-6 w-full">
           <div className="mb-6"><h2 className="text-2xl font-extrabold text-[#191c21] tracking-tight">Examens archivés</h2><p className="text-slate-500 text-sm mt-1">Registre des comptes-rendus validés</p></div>
-
           <div className="flex gap-3 mb-6 flex-wrap">
             <button onClick={() => setTypeFilter('all')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${typeFilter === 'all' ? 'bg-primary text-white' : 'bg-white text-slate-600 border border-outline-variant/20'}`}>Tous</button>
             <button onClick={() => setTypeFilter('BIOPSIE')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${typeFilter === 'BIOPSIE' ? 'bg-primary text-white' : 'bg-white text-slate-600 border border-outline-variant/20'}`}>Biopsie</button>
@@ -115,7 +112,6 @@ export default function ArchivesPage() {
             <button onClick={() => setTypeFilter('POS')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${typeFilter === 'POS' ? 'bg-primary text-white' : 'bg-white text-slate-600 border border-outline-variant/20'}`}>POS</button>
             <button onClick={() => setTypeFilter('POC')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${typeFilter === 'POC' ? 'bg-primary text-white' : 'bg-white text-slate-600 border border-outline-variant/20'}`}>POC</button>
           </div>
-
           <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-outline-variant/20">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
