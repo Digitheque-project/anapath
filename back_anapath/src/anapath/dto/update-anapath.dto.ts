@@ -14,6 +14,20 @@ class ResultatDto {
   imageUrls?: string[];
 }
 
+class PrelevementDto {
+  @IsOptional()
+  @IsString()
+  site?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @Type(() => Object)
+  clinicalData?: Record<string, any>;
+}
+
 export class UpdateAnapathDto {
   @IsOptional()
   @IsEnum(Statut)
@@ -23,6 +37,11 @@ export class UpdateAnapathDto {
   @ValidateNested()
   @Type(() => ResultatDto)
   resultat?: ResultatDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PrelevementDto)
+  prelevement?: PrelevementDto;
 
   @IsOptional()
   @IsString()

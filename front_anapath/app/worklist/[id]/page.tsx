@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
-import ExtemporaneTimer from '@/components/ExtemporaneTimer';
 import axios from 'axios';
 import { statusLabels, statusColors } from '@/lib/statusLabels';
 
@@ -12,25 +11,27 @@ interface AnapathRequest {
   id: string;
   anapathId: string;
   patientId: string;
-  episodeId: string | null;
-  prescriptionId: string | null;
   typeExamen: string;
+  statut: string;
   isExtemporane: boolean;
   prelevement: {
     site: string;
     description: string;
-  };
-  resultat: {
-    conclusion: string;
-    details: string;
-    imageUrls?: string[];
   } | null;
-  statut: string;
-  validatedByUserId: string | null;
-  validatedAt: string | null;
-  signedHash: string | null;
   createdAt: string;
-  updatedAt: string;
+}
+
+function extractValue(description: string | undefined, key: string): string {
+  if (!description) return '-';
+  const regex = new RegExp(`${key}:\\s*([^,]+)`);
+  const match = description.match(regex);
+  return match ? match[1].trim() : '-';
+}
+
+function formatMotif(description: string | undefined): string {
+  if (!description) return 'Non renseigné';
+  const cleaned = description.replace(/(?:[A-Za-zÀ-ÖØ-öø-ÿ]+):\s*[^,]+(?:,\s*)?/g, '').trim();
+  return cleaned || 'Non renseigné';
 }
 
 export default function WorklistDetailPage() {
@@ -41,14 +42,21 @@ export default function WorklistDetailPage() {
   const [request, setRequest] = useState<AnapathRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
-  const [resultData, setResultData] = useState({
-    conclusion: '',
-    details: ''
-  });
-  const [signature, setSignature] = useState({
-    signature: '',
-    ordreProfessionnelNumber: ''
-  });
+
+  const patientInfo = {
+    fullName: 'RANDRIANTOANDRO N.',
+    sex: 'Féminin',
+    age: 34,
+    sampleDate: request
+      ? new Date(request.createdAt).toLocaleDateString('fr-FR', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        })
+      : '',
+    site: request?.prelevement?.site || '',
+    prescriber: 'Dr. Rakotoarisoa Jean - Service de Chirurgie',
+  };
 
   useEffect(() => {
     fetchRequest();
@@ -59,12 +67,6 @@ export default function WorklistDetailPage() {
       setLoading(true);
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}`);
       setRequest(response.data);
-      if (response.data.resultat) {
-        setResultData({
-          conclusion: response.data.resultat.conclusion || '',
-          details: response.data.resultat.details || ''
-        });
-      }
     } catch (error) {
       console.error('Erreur:', error);
     } finally {
@@ -72,39 +74,23 @@ export default function WorklistDetailPage() {
     }
   };
 
-  const handleSaveResult = async () => {
+  const handleTakeCharge = async () => {
     if (!request) return;
     try {
       setUpdating(true);
-      await axios.patch(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}`, {
-        statut: 'RESULTAT_DISPONIBLE',
-        resultat: resultData
-      });
-      await fetchRequest();
-      alert('Résultat sauvegardé avec succès !');
+      // Ne changer le statut que si l'examen est encore en "En attente de validation" (CREEE)
+      // Sinon, on garde le statut actuel pour ne pas écraser un résultat déjà saisi.
+      if (request.statut === 'CREEE') {
+        await axios.patch(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${request.id}`, {
+          statut: 'EN_ATTENTE',
+        });
+        await fetchRequest();
+      }
+      // Rediriger vers la page validation avec l'ID de l'examen
+      router.push(`/validation?id=${request.id}`);
     } catch (error) {
-      console.error('Erreur:', error);
-      alert('Erreur lors de la sauvegarde');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const handleValidate = async () => {
-    if (!request) return;
-    if (!signature.signature || !signature.ordreProfessionnelNumber) {
-      alert('Veuillez remplir tous les champs de signature');
-      return;
-    }
-    try {
-      setUpdating(true);
-      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}/validate`, signature);
-      await fetchRequest();
-      alert('Demande validée avec succès !');
-      router.push('/worklist');
-    } catch (error) {
-      console.error('Erreur:', error);
-      alert('Erreur lors de la validation');
+      console.error('Erreur lors de la prise en charge:', error);
+      alert('Erreur lors de la prise en charge');
     } finally {
       setUpdating(false);
     }
@@ -132,10 +118,14 @@ export default function WorklistDetailPage() {
     );
   }
 
+  // Le bouton "Prise en charge" est visible tant que l'examen n'est pas validé (Terminé)
+  const isTakeChargeVisible = request.statut !== 'VALIDE' && request.statut !== 'ARCHIVE';
+
   return (
     <div className="flex min-h-screen bg-[#f9f9ff] text-[#191c21]">
       <div className="fixed inset-0 grain-overlay z-[60] pointer-events-none"></div>
       <Sidebar />
+
       <main className="flex-1 ml-64 min-h-screen flex flex-col w-[calc(100%-256px)]">
         <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl flex justify-between items-center px-6 py-3 shadow-sm">
           <div className="flex items-center gap-4">
@@ -143,7 +133,7 @@ export default function WorklistDetailPage() {
               <span className="material-symbols-outlined text-base">arrow_back</span>
               Retour
             </Link>
-            <h2 className="text-lg font-black text-blue-900">Détail de la demande</h2>
+            <h2 className="text-lg font-black text-blue-900">Détail de la prescription</h2>
             <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusColors[request.statut] || 'bg-gray-100 text-gray-700'}`}>
               {statusLabels[request.statut] || request.statut}
             </span>
@@ -156,124 +146,165 @@ export default function WorklistDetailPage() {
         </header>
 
         <div className="flex-1 p-6 w-full max-w-5xl mx-auto">
-          {request.isExtemporane && request.statut !== 'VALIDE' && (
-            <div className="mb-6">
-              <ExtemporaneTimer
-                startTime={request.createdAt}
-                requestId={request.id}
-                anapathId={request.anapathId}
-                patientId={request.patientId}
-                onTimeOut={() => console.log('Temps écoulé')}
-              />
-            </div>
-          )}
-
           <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="text-xl font-bold text-[#191c21]">Patient: {request.patientId}</h3>
-                <div className="flex gap-4 mt-2 text-sm text-slate-500">
-                  <span>ID: {request.anapathId}</span>
-                  <span>Type: {request.typeExamen}</span>
-                  <span>Reçu le: {new Date(request.createdAt).toLocaleDateString('fr-FR')}</span>
-                  {request.isExtemporane && (
-                    <span className="text-tertiary font-bold flex items-center gap-1">
-                      <span className="material-symbols-outlined text-sm">emergency</span>
-                      EXAMEN STAT
-                    </span>
-                  )}
+            <div className="flex items-center gap-2 mb-4">
+              <span className="material-symbols-outlined text-primary">description</span>
+              <h4 className="text-lg font-bold text-primary">Détails de la prescription</h4>
+            </div>
+
+            {/* Identité Patient */}
+            <div className="bg-surface-container-low rounded-lg p-4 mb-5 border border-outline-variant/30">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="material-symbols-outlined text-primary text-sm">person</span>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Identité Patient</label>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <p className="text-xs text-slate-400">Nom complet</p>
+                  <p className="font-bold text-on-surface">{patientInfo.fullName}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Patient ID</p>
+                  <p className="font-medium text-on-surface">{request.patientId}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Âge / Sexe</p>
+                  <p className="font-medium text-on-surface">{patientInfo.age} ans / {patientInfo.sex}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Type d'examen</p>
+                  <p className="font-medium text-on-surface">
+                    {request.typeExamen === 'FCV_PAP' && 'FCV / Pap test'}
+                    {request.typeExamen === 'CYT0PONCTION' && 'Cytoponction'}
+                    {request.typeExamen === 'LIQUIDE' && 'Liquide'}
+                    {request.typeExamen === 'BIOPSIE' && 'Biopsie'}
+                    {request.typeExamen === 'POS' && 'POS'}
+                    {request.typeExamen === 'POC' && 'POC'}
+                    {request.typeExamen === 'EXTEMPORANE_STAT' && 'Extemporané'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Date Prélèvement</p>
+                  <p className="font-medium text-on-surface">{patientInfo.sampleDate}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Site de prélèvement</p>
+                  <p className="font-medium text-on-surface">{request.prelevement?.site || '-'}</p>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-6">
-            <h4 className="font-bold text-primary mb-3">📋 Prélèvement</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div><label className="text-xs text-slate-400">Site</label><p className="font-medium">{request.prelevement?.site || '-'}</p></div>
-              <div><label className="text-xs text-slate-400">Description</label><p className="font-medium">{request.prelevement?.description || '-'}</p></div>
+            {/* Motif de prescription */}
+            <div className="bg-blue-50/70 border border-blue-100 rounded-lg p-4 mb-5">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1">
+                <span className="material-symbols-outlined text-sm">medical_services</span>
+                Motif de prescription
+              </label>
+              <p className="text-base font-medium text-on-surface leading-relaxed">
+                {formatMotif(request.prelevement?.description) || 'Non renseigné'}
+              </p>
             </div>
-          </div>
 
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-6">
-            <h4 className="font-bold text-primary mb-3">🔬 Compte-rendu d'analyse</h4>
+            {/* Détails spécifiques par type */}
             <div className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase">Description microscopique</label>
-                <textarea
-                  value={resultData.details}
-                  onChange={(e) => setResultData({ ...resultData, details: e.target.value })}
-                  className="w-full mt-1 p-3 bg-[#f2f3fb] border border-outline-variant/30 rounded-lg text-sm"
-                  rows={4}
-                  placeholder="Observations cellulaires détaillées..."
-                  disabled={request.statut === 'VALIDE'}
-                />
+              <div className="border-b border-outline-variant/30 pb-2">
+                <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Informations cliniques</h5>
               </div>
-              <div>
-                <label className="text-xs font-bold text-tertiary uppercase">Conclusion diagnostique</label>
-                <textarea
-                  value={resultData.conclusion}
-                  onChange={(e) => setResultData({ ...resultData, conclusion: e.target.value })}
-                  className="w-full mt-1 p-3 bg-tertiary/5 border border-tertiary/20 rounded-lg text-sm font-semibold"
-                  rows={3}
-                  placeholder="Résumé final du diagnostic..."
-                  disabled={request.statut === 'VALIDE'}
-                />
-              </div>
-              {request.statut !== 'VALIDE' && (
-                <button
-                  onClick={handleSaveResult}
-                  disabled={updating}
-                  className="px-6 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:opacity-90 transition"
-                >
-                  {updating ? 'Sauvegarde...' : '💾 Sauvegarder le résultat'}
-                </button>
+
+              {request.typeExamen === 'FCV_PAP' && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">GPA</label>
+                    <p className="font-medium text-on-surface">{extractValue(request.prelevement?.description, 'GPA')}</p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">DDR</label>
+                    <p className="font-medium text-on-surface">{extractValue(request.prelevement?.description, 'DDR')}</p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">Méthode</label>
+                    <p className="font-medium text-on-surface">{extractValue(request.prelevement?.description, 'Méthode')}</p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">Symptômes</label>
+                    <p className="font-medium text-on-surface">{extractValue(request.prelevement?.description, 'Symptômes')}</p>
+                  </div>
+                </div>
+              )}
+
+              {request.typeExamen === 'CYT0PONCTION' && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">Siège</label>
+                    <p className="font-medium text-on-surface">{request.prelevement?.site || '-'}</p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">Organe</label>
+                    <p className="font-medium text-on-surface">{extractValue(request.prelevement?.description, 'Organe')}</p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">Fixateur</label>
+                    <p className="font-medium text-on-surface">{extractValue(request.prelevement?.description, 'Fixateur')}</p>
+                  </div>
+                </div>
+              )}
+
+              {request.typeExamen === 'LIQUIDE' && (
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">Nature du liquide</label>
+                    <p className="font-medium text-on-surface">{extractValue(request.prelevement?.description, 'Nature')}</p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">Notes</label>
+                    <p className="font-medium text-on-surface">{extractValue(request.prelevement?.description, 'Notes')}</p>
+                  </div>
+                </div>
+              )}
+
+              {(request.typeExamen === 'BIOPSIE' || request.typeExamen === 'POS' || request.typeExamen === 'POC') && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">Type</label>
+                    <p className="font-medium text-on-surface">{extractValue(request.prelevement?.description, 'Type')}</p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">Fixateur</label>
+                    <p className="font-medium text-on-surface">{extractValue(request.prelevement?.description, 'Fixateur')}</p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">Nature</label>
+                    <p className="font-medium text-on-surface">{extractValue(request.prelevement?.description, 'Nature')}</p>
+                  </div>
+                </div>
+              )}
+
+              {request.typeExamen === 'EXTEMPORANE_STAT' && (
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">Chirurgien</label>
+                    <p className="font-medium text-on-surface">{extractValue(request.prelevement?.description, 'Chirurgien')}</p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-lg p-3">
+                    <label className="text-xs text-slate-400 block">Question posée</label>
+                    <p className="font-medium text-on-surface">{extractValue(request.prelevement?.description, 'Question')}</p>
+                  </div>
+                </div>
               )}
             </div>
           </div>
 
-          {request.statut !== 'VALIDE' && request.statut === 'RESULTAT_DISPONIBLE' && (
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-6">
-              <h4 className="font-bold text-primary mb-3">✍️ Signature numérique</h4>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase">Signature</label>
-                  <input
-                    type="text"
-                    value={signature.signature}
-                    onChange={(e) => setSignature({ ...signature, signature: e.target.value })}
-                    className="w-full mt-1 p-3 bg-[#f2f3fb] border border-outline-variant/30 rounded-lg text-sm"
-                    placeholder="Signature électronique"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase">N° Ordre professionnel</label>
-                  <input
-                    type="text"
-                    value={signature.ordreProfessionnelNumber}
-                    onChange={(e) => setSignature({ ...signature, ordreProfessionnelNumber: e.target.value })}
-                    className="w-full mt-1 p-3 bg-[#f2f3fb] border border-outline-variant/30 rounded-lg text-sm"
-                    placeholder="Ex: ONM-12345"
-                  />
-                </div>
-                <button
-                  onClick={handleValidate}
-                  disabled={updating}
-                  className="w-full py-3 bg-gradient-to-r from-primary to-primary-container text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-sm">verified</span>
-                  {updating ? 'Traitement...' : 'Valider et signer (immuable)'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {request.statut === 'VALIDE' && (
-            <div className="bg-green-50 p-6 rounded-xl border border-green-200">
-              <h4 className="font-bold text-green-700 mb-3">✅ Demande validée</h4>
-              <p className="text-sm">Validée par: {request.validatedByUserId}</p>
-              <p className="text-sm">Le: {new Date(request.validatedAt!).toLocaleString('fr-FR')}</p>
-              <p className="text-xs text-slate-500 mt-2">Hash: {request.signedHash?.substring(0, 20)}...</p>
+          {/* Bouton Prise en charge - visible tant que le statut n'est pas "Terminé" */}
+          {isTakeChargeVisible && (
+            <div className="flex justify-center mt-8">
+              <button
+                onClick={handleTakeCharge}
+                disabled={updating}
+                className="px-8 py-3 bg-blue-600 text-white font-bold rounded-full shadow-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined">handshake</span>
+                {updating ? 'Traitement...' : 'Prise en charge'}
+              </button>
             </div>
           )}
         </div>

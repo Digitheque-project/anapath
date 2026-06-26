@@ -1,5 +1,5 @@
 export const statusLabels: Record<string, string> = {
-    CREEE: 'Enregistrée',
+    CREEE: 'En attente de validation',
     EN_ATTENTE: 'En cours de traitement',
     EN_COURS: 'En analyse',
     RESULTAT_DISPONIBLE: 'Résultat saisi',
