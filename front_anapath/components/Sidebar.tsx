@@ -37,15 +37,6 @@ export default function Sidebar() {
           </Link>
         ))}
       </nav>
-
-      <div className="px-4 mt-auto">
-        <Link href="/nouvel-examen">
-          <button className="w-full py-3 px-4 bg-gradient-to-br from-[#00478d] to-[#005eb8] text-white rounded-lg font-semibold text-sm shadow-md hover:shadow-lg hover:opacity-90 transition-all flex items-center justify-center gap-2">
-            <span className="material-symbols-outlined text-base">add</span>
-            Nouvel examen
-          </button>
-        </Link>
-      </div>
     </aside>
   );
 }
