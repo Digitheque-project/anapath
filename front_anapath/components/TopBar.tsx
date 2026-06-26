@@ -4,13 +4,22 @@ import NotificationBell from './NotificationBell';
 import SettingsMenu from './SettingsMenu';
 import { useSearch } from './SearchContext';
 
+const DOCTOR_NAME = 'Aris Thorne';
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return `Bonjour, Dr. ${DOCTOR_NAME}`;
+  if (hour >= 12 && hour < 18) return `Bon après-midi, Dr. ${DOCTOR_NAME}`;
+  return `Bonsoir, Dr. ${DOCTOR_NAME}`;
+}
+
 export default function TopBar() {
   const { searchQuery, setSearchQuery } = useSearch();
 
   return (
     <header className="w-full sticky top-0 z-50 bg-white/80 backdrop-blur-xl flex justify-between items-center px-6 py-3 shadow-sm shadow-blue-900/5">
       <div className="flex items-center gap-4 flex-1">
-        <h2 className="text-lg font-black text-blue-900 tracking-tight whitespace-nowrap">Anapath System</h2>
+        <h2 className="text-lg font-black text-blue-900 tracking-tight whitespace-nowrap">{getGreeting()}</h2>
         
         <div className="h-6 w-[1px] bg-outline-variant/30"></div>
         
@@ -31,7 +40,7 @@ export default function TopBar() {
         
         <div className="flex items-center gap-2 pl-2">
           <div className="text-right">
-            <p className="text-sm font-bold text-[#191c21]">Dr. Aris Thorne</p>
+            <p className="text-sm font-bold text-[#191c21]">Dr. {DOCTOR_NAME}</p>
             <p className="text-[10px] text-slate-500">Pathologiste senior</p>
           </div>
           <div className="w-8 h-8 rounded-full bg-[#00478d]/10 flex items-center justify-center">

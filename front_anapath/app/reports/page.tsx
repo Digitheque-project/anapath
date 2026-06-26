@@ -7,6 +7,16 @@ import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatDate } from '@/lib/dateFormat';
+import {
+  getMondayOfWeek,
+  formatWeekLabel,
+  isDateInWeek,
+  getDailyVolumeForWeek,
+  toWeekInputValue,
+  parseWeekInputValue,
+} from '@/lib/weekUtils';
+import { statusLabels } from '@/lib/statusLabels';
 
 interface AnapathRequest {
   id: string;
@@ -36,6 +46,7 @@ export default function ReportsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
+  const [weekStart, setWeekStart] = useState(() => getMondayOfWeek(new Date()));
 
   useEffect(() => {
     fetchData();
@@ -116,7 +127,7 @@ export default function ReportsPage() {
 
   const exportToPDF = () => {
     const doc = new jsPDF();
-    const date = new Date().toLocaleDateString('fr-FR');
+    const date = formatDate(new Date());
     let yOffset = 20;
 
     // Titre
@@ -218,7 +229,7 @@ export default function ReportsPage() {
       req.patientId,
       req.typeExamen,
       req.statut,
-      new Date(req.createdAt).toLocaleDateString('fr-FR')
+      formatDate(req.createdAt)
     ]);
 
     autoTable(doc, {
@@ -240,6 +251,83 @@ export default function ReportsPage() {
   };
 
   const maxCount = Math.max(...stats.monthlyData.map(d => d.count), 1);
+
+  const weeklyRequests = requests
+    .filter((req) => isDateInWeek(req.createdAt, weekStart))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const weeklyValidated = weeklyRequests.filter((r) => r.statut === 'VALIDE');
+  const weeklyPending = weeklyRequests.filter(
+    (r) => r.statut === 'CREEE' || r.statut === 'EN_ATTENTE' || r.statut === 'EN_COURS',
+  );
+  let weeklyAvgDelay = 0;
+  if (weeklyValidated.length > 0) {
+    const totalDays = weeklyValidated.reduce((sum, req) => {
+      if (!req.validatedAt) return sum;
+      const created = new Date(req.createdAt);
+      const validated = new Date(req.validatedAt);
+      return sum + (validated.getTime() - created.getTime()) / (1000 * 3600 * 24);
+    }, 0);
+    weeklyAvgDelay = totalDays / weeklyValidated.length;
+  }
+  const weeklyDailyVolume = getDailyVolumeForWeek(weeklyRequests, weekStart);
+  const weeklyMaxCount = Math.max(...weeklyDailyVolume.map((d) => d.count), 1);
+
+  const exportWeeklyPDF = () => {
+    const doc = new jsPDF();
+    const label = formatWeekLabel(weekStart);
+    let y = 20;
+
+    doc.setFontSize(18);
+    doc.setTextColor(0, 71, 141);
+    doc.text('Rapport hebdomadaire Anapath', 14, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Semaine : ${label}`, 14, y);
+    y += 10;
+
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Total examens : ${weeklyRequests.length}`, 14, y);
+    y += 6;
+    doc.text(`Validés : ${weeklyValidated.length}`, 14, y);
+    y += 6;
+    doc.text(`En attente : ${weeklyPending.length}`, 14, y);
+    y += 6;
+    doc.text(`Délai moyen : ${weeklyAvgDelay.toFixed(1)} jours`, 14, y);
+    y += 10;
+
+    const volumeRows = weeklyDailyVolume.map((d) => [d.day, d.count.toString()]);
+    autoTable(doc, {
+      startY: y,
+      head: [['Jour', 'Volume']],
+      body: volumeRows,
+      theme: 'plain',
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [0, 71, 141], textColor: [255, 255, 255] },
+      margin: { left: 14, right: 14 },
+    });
+    y = (doc as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+
+    const tableData = weeklyRequests.map((req) => [
+      req.anapathId,
+      req.patientId,
+      req.typeExamen,
+      req.statut,
+      formatDate(req.createdAt),
+    ]);
+    autoTable(doc, {
+      startY: y,
+      head: [['ID PARA', 'Patient', 'Type', 'Statut', 'Date']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: { fillColor: [0, 71, 141], textColor: [255, 255, 255] },
+      margin: { left: 14, right: 14 },
+    });
+
+    doc.save(`rapport-hebdo-anapath-${toWeekInputValue(weekStart)}.pdf`);
+  };
 
   const getTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
@@ -339,6 +427,94 @@ export default function ReportsPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-8">
+            <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+              <div>
+                <h3 className="font-bold text-lg">Rapport hebdomadaire</h3>
+                <p className="text-sm text-slate-500">{formatWeekLabel(weekStart)}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="week"
+                  value={toWeekInputValue(weekStart)}
+                  onChange={(e) => setWeekStart(parseWeekInputValue(e.target.value))}
+                  className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                />
+                <button
+                  onClick={exportWeeklyPDF}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#00478d] to-[#005eb8] text-white rounded-lg font-semibold text-sm shadow hover:opacity-90 transition-all"
+                >
+                  <span className="material-symbols-outlined text-base">download</span>
+                  Exporter PDF
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="bg-[#f2f3fb] p-4 rounded-lg">
+                <p className="text-xs font-bold text-slate-500 uppercase">Total examens</p>
+                <p className="text-2xl font-extrabold text-primary">{weeklyRequests.length}</p>
+              </div>
+              <div className="bg-[#f2f3fb] p-4 rounded-lg">
+                <p className="text-xs font-bold text-slate-500 uppercase">Validés</p>
+                <p className="text-2xl font-extrabold text-primary">{weeklyValidated.length}</p>
+              </div>
+              <div className="bg-[#f2f3fb] p-4 rounded-lg">
+                <p className="text-xs font-bold text-slate-500 uppercase">En attente</p>
+                <p className="text-2xl font-extrabold text-tertiary">{weeklyPending.length}</p>
+              </div>
+              <div className="bg-[#f2f3fb] p-4 rounded-lg">
+                <p className="text-xs font-bold text-slate-500 uppercase">Délai moyen</p>
+                <p className="text-2xl font-extrabold text-primary">{weeklyAvgDelay.toFixed(1)} <span className="text-sm font-normal">j</span></p>
+              </div>
+            </div>
+
+            <h4 className="font-semibold mb-3 text-sm">Volume par jour</h4>
+            <div className="flex items-end justify-between gap-2 h-40 mb-6">
+              {weeklyDailyVolume.map((item) => (
+                <div key={item.day} className="flex-1 flex flex-col items-center gap-2">
+                  <div
+                    className="w-full bg-primary/30 rounded-t-lg relative group"
+                    style={{ height: `${(item.count / weeklyMaxCount) * 100}%`, minHeight: '8px' }}
+                  >
+                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                      {item.count}
+                    </span>
+                  </div>
+                  <span className="text-xs font-medium text-slate-500">{item.day}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-[#f2f3fb] text-[11px] font-bold text-slate-500 uppercase">
+                  <tr>
+                    <th className="p-3 text-left">ID PARA</th>
+                    <th className="p-3 text-left">Patient</th>
+                    <th className="p-3 text-left">Type</th>
+                    <th className="p-3 text-left">Statut</th>
+                    <th className="p-3 text-left">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant/10">
+                  {weeklyRequests.map((req) => (
+                    <tr key={req.id} className="hover:bg-slate-50/80">
+                      <td className="p-3 font-mono font-bold text-primary">{req.anapathId}</td>
+                      <td className="p-3">{req.patientId}</td>
+                      <td className="p-3">{getTypeLabel(req.typeExamen)}</td>
+                      <td className="p-3">{statusLabels[req.statut] || req.statut}</td>
+                      <td className="p-3 text-slate-500">{formatDate(req.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {weeklyRequests.length === 0 && (
+                <p className="text-center py-6 text-slate-400 text-sm">Aucun examen pour cette semaine</p>
+              )}
             </div>
           </div>
         </div>

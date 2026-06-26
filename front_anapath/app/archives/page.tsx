@@ -6,6 +6,8 @@ import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
+import { filterAndSortAnapathRequests } from '@/lib/searchAnapath';
+import { formatDate } from '@/lib/dateFormat';
 
 interface AnapathRequest {
   id: string;
@@ -33,15 +35,7 @@ export default function ArchivesPage() {
   useEffect(() => {
     let filtered = requests;
     if (typeFilter !== 'all') filtered = filtered.filter(req => req.typeExamen === typeFilter);
-    if (searchQuery.trim() !== '') {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(req =>
-        req.anapathId.toLowerCase().includes(query) ||
-        req.patientId.toLowerCase().includes(query) ||
-        req.typeExamen.toLowerCase().includes(query)
-      );
-    }
-    setFilteredRequests(filtered);
+    setFilteredRequests(filterAndSortAnapathRequests(filtered, searchQuery));
   }, [searchQuery, typeFilter, requests]);
 
   const fetchData = async () => {
@@ -145,7 +139,7 @@ export default function ArchivesPage() {
                       <td className="p-4 max-w-xs truncate text-slate-600">{req.resultat?.conclusion || '-'}</td>
                       <td className="p-4 text-slate-500 text-xs">{req.validatedByUserId || '-'}</td>
                       <td className="p-4 text-slate-500 text-xs">
-                        {req.validatedAt ? new Date(req.validatedAt).toLocaleDateString('fr-FR') : '-'}
+                        {req.validatedAt ? formatDate(req.validatedAt) : '-'}
                       </td>
                       <td className="p-4 text-center">
                         <Link

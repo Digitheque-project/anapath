@@ -6,7 +6,8 @@ import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
-import { statusLabels, statusColors } from '@/lib/statusLabels';
+import { formatDateLong, formatDateTime } from '@/lib/dateFormat';
+import { getServiceDisplayName } from '@/lib/serviceDisplay';
 
 declare global {
   interface Window {
@@ -32,6 +33,7 @@ interface AnapathRequest {
   resultat: { conclusion: string; details: string } | null;
   createdAt: string;
   isExtemporane?: boolean;
+  episodeId?: string | null;
 }
 
 export default function ValidationPage() {
@@ -57,15 +59,11 @@ export default function ValidationPage() {
     fullName: 'RANDRIANTOANDRO N.',
     sex: 'Féminin',
     age: 34,
-    sampleDate: selectedRequest
-      ? new Date(selectedRequest.createdAt).toLocaleDateString('fr-FR', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
-      : '',
+    sampleDate: selectedRequest ? formatDateLong(selectedRequest.createdAt) : '',
     site: selectedRequest?.prelevement?.site || '',
-    prescriber: 'Dr. Rakotoarisoa Jean - Service de Chirurgie',
+    requestingService: selectedRequest
+      ? getServiceDisplayName({ episodeId: selectedRequest.episodeId })
+      : 'Service inconnu',
   };
 
   const personnel = {
@@ -409,7 +407,7 @@ export default function ValidationPage() {
       <p><strong>Type d'examen :</strong> ${getTypeLabel(selectedRequest.typeExamen)}</p>
       <p><strong>Date prélèvement :</strong> ${patientInfo.sampleDate}</p>
       <p><strong>Site de prélèvement :</strong> ${selectedRequest.prelevement?.site || '-'}</p>
-      <p><strong>Prescripteur :</strong> ${patientInfo.prescriber}</p>
+      <p><strong>Service demandeur :</strong> ${patientInfo.requestingService}</p>
       <p><strong>Type de traitement :</strong> ${clinicalData.treatmentType || '_________________'}</p>
       <p><strong>Suspicion diagnostique :</strong> ${clinicalData.suspicion || '_________________'}</p>
       <p><strong>Renseignements cliniques :</strong> ${clinicalData.clinicalNotes || '_________________'}</p>
@@ -419,7 +417,7 @@ export default function ValidationPage() {
       <hr/>
       <p><strong>Signature électronique :</strong> ${signature.signature || '_________________'}</p>
       <p><strong>N° Ordre professionnel :</strong> ${signature.ordreProfessionnelNumber || '_________________'}</p>
-      <p style="margin-top:20px;"><strong>Fait à Fianarantsoa, le ${new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' })}</strong></p>
+      <p style="margin-top:20px;"><strong>Fait à Fianarantsoa, le ${formatDateLong(new Date())}</strong></p>
     `;
 
     body.appendChild(leftCol);
@@ -545,8 +543,8 @@ export default function ValidationPage() {
                       <div className="flex items-start gap-2">
                         <span className="material-symbols-outlined text-secondary">stethoscope</span>
                         <div>
-                          <p className="text-xs text-on-surface-variant">Prescripteur</p>
-                          <p className="font-medium text-on-surface">{patientInfo.prescriber}</p>
+                          <p className="text-xs text-on-surface-variant">Service demandeur</p>
+                          <p className="font-medium text-on-surface">{patientInfo.requestingService}</p>
                         </div>
                       </div>
                       <hr className="border-outline-variant my-3" />
@@ -632,12 +630,7 @@ export default function ValidationPage() {
                 <section className="bg-white border border-outline-variant rounded-xl shadow-sm p-4 md:p-6 mt-4">
                   <div className="text-center">
                     <p className="text-xs text-on-surface-variant mb-4">
-                      Fait à Fianarantsoa, le{' '}
-                      {new Date().toLocaleDateString('fr-FR', {
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric',
-                      })}
+                      Fait à Fianarantsoa, le {formatDateLong(new Date())}
                     </p>
 
                     <div className="mt-6 border-t border-outline-variant pt-4">

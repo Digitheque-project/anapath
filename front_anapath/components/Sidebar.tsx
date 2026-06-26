@@ -17,8 +17,7 @@ export default function Sidebar() {
   return (
     <aside className="h-screen w-64 flex flex-col fixed left-0 top-0 bg-slate-50 py-6 z-40">
       <div className="px-6 mb-8">
-        <h1 className="text-xl font-bold tracking-tight text-blue-900">Service Anapath</h1>
-        <p className="text-[11px] tracking-wider uppercase text-slate-500 font-medium">Sanctuaire Clinique</p>
+        <h1 className="text-xl font-bold tracking-tight text-blue-900">Service d&apos;Anatomie Pathologique</h1>
       </div>
 
       <nav className="flex-1 space-y-1 px-4">

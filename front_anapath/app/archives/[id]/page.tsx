@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import axios from 'axios';
+import { formatDateLong, formatDateTime, formatDate } from '@/lib/dateFormat';
+import { getServiceDisplayName } from '@/lib/serviceDisplay';
 import { statusLabels, statusColors } from '@/lib/statusLabels';
 
 declare global {
@@ -37,6 +39,7 @@ interface AnapathRequest {
   validatedAt: string | null;
   signedHash: string | null;
   createdAt: string;
+  episodeId?: string | null;
 }
 
 export default function ArchiveDetailPage() {
@@ -51,15 +54,11 @@ export default function ArchiveDetailPage() {
     fullName: 'RANDRIANTOANDRO N.',
     sex: 'Féminin',
     age: 34,
-    sampleDate: request
-      ? new Date(request.createdAt).toLocaleDateString('fr-FR', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
-      : '',
+    sampleDate: request ? formatDateLong(request.createdAt) : '',
     site: request?.prelevement?.site || '',
-    prescriber: 'Dr. Rakotoarisoa Jean - Service de Chirurgie',
+    requestingService: request
+      ? getServiceDisplayName({ episodeId: request.episodeId })
+      : 'Service inconnu',
   };
 
   const personnel = {
@@ -211,7 +210,7 @@ export default function ArchiveDetailPage() {
       <p><strong>Type d'examen :</strong> ${getTypeLabel(request.typeExamen)}</p>
       <p><strong>Date prélèvement :</strong> ${patientInfo.sampleDate}</p>
       <p><strong>Site de prélèvement :</strong> ${request.prelevement?.site || '-'}</p>
-      <p><strong>Prescripteur :</strong> ${patientInfo.prescriber}</p>
+      <p><strong>Service demandeur :</strong> ${patientInfo.requestingService}</p>
       <p><strong>Type de traitement :</strong> ${clinicalData.treatmentType || '_________________'}</p>
       <p><strong>Suspicion diagnostique :</strong> ${clinicalData.suspicion || '_________________'}</p>
       <p><strong>Renseignements cliniques :</strong> ${clinicalData.clinicalNotes || '_________________'}</p>
@@ -220,9 +219,9 @@ export default function ArchiveDetailPage() {
       <p><strong>CONCLUSION :</strong><br/>${request.resultat?.conclusion || '_________________'}</p>
       <hr/>
       <p><strong>Validé par :</strong> ${request.validatedByUserId || '_________________'}</p>
-      <p><strong>Date validation :</strong> ${request.validatedAt ? new Date(request.validatedAt).toLocaleDateString('fr-FR') : '_________________'}</p>
+      <p><strong>Date validation :</strong> ${request.validatedAt ? formatDate(request.validatedAt) : '_________________'}</p>
       <p><strong>Hash signature :</strong> ${request.signedHash?.substring(0, 20) || '_________________'}</p>
-      <p style="margin-top:20px;"><strong>Fait à Fianarantsoa, le ${new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' })}</strong></p>
+      <p style="margin-top:20px;"><strong>Fait à Fianarantsoa, le ${formatDateLong(new Date())}</strong></p>
     `;
 
     body.appendChild(leftCol);
@@ -314,8 +313,8 @@ export default function ArchiveDetailPage() {
             <div className="flex items-start gap-2">
               <span className="material-symbols-outlined text-secondary">stethoscope</span>
               <div>
-                <p className="text-xs text-slate-400">Prescripteur</p>
-                <p className="font-medium">{patientInfo.prescriber}</p>
+                <p className="text-xs text-slate-400">Service demandeur</p>
+                <p className="font-medium">{patientInfo.requestingService}</p>
               </div>
             </div>
             <hr className="border-outline-variant my-3" />
@@ -356,7 +355,7 @@ export default function ArchiveDetailPage() {
           <div className="bg-green-50 p-6 rounded-xl border border-green-200 mb-6">
             <h4 className="font-bold text-green-700 mb-3">✅ Demande validée</h4>
             <p className="text-sm">Validée par: {request.validatedByUserId}</p>
-            <p className="text-sm">Le: {request.validatedAt ? new Date(request.validatedAt).toLocaleString('fr-FR') : '-'}</p>
+            <p className="text-sm">Le: {request.validatedAt ? formatDateTime(request.validatedAt) : '-'}</p>
             <p className="text-xs text-slate-500 mt-2">Hash: {request.signedHash?.substring(0, 20)}...</p>
           </div>
 

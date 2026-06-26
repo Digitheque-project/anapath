@@ -17,7 +17,7 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "Anapath System - Clinical Sanctuary",
+  title: "Service d'Anatomie Pathologique",
   description: "Plateforme d'anatomie pathologique",
 };
 

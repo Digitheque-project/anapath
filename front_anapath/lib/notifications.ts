@@ -17,6 +17,8 @@ export interface ApiNotification {
 export interface NotificationItem {
   id: string;
   type: NotificationDisplayType;
+  rawType: string;
+  priority: string;
   title: string;
   message: string;
   patientId: string;
@@ -24,6 +26,8 @@ export interface NotificationItem {
   requestId: string;
   timestamp: string;
   read: boolean;
+  source?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export function mapApiNotification(n: ApiNotification): NotificationItem {
@@ -31,6 +35,8 @@ export function mapApiNotification(n: ApiNotification): NotificationItem {
   return {
     id: n.id,
     type: mapDisplayType(n.type, n.priority),
+    rawType: n.type,
+    priority: n.priority || 'medium',
     title: n.title,
     message: n.message,
     patientId: String(metadata.patientId ?? ''),
@@ -38,6 +44,8 @@ export function mapApiNotification(n: ApiNotification): NotificationItem {
     requestId: String(metadata.requestId ?? metadata.id ?? ''),
     timestamp: n.createdAt,
     read: n.read,
+    source: n.source,
+    metadata,
   };
 }
 

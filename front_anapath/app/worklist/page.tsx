@@ -6,6 +6,8 @@ import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
+import { filterAndSortAnapathRequests } from '@/lib/searchAnapath';
+import { formatDate } from '@/lib/dateFormat';
 import { statusLabels, statusColors } from '@/lib/statusLabels';
 
 interface AnapathRequest {
@@ -15,7 +17,10 @@ interface AnapathRequest {
   typeExamen: string;
   statut: string;
   createdAt: string;
+  isExtemporane?: boolean;
   prelevement?: { site: string; description: string };
+  resultat?: { conclusion?: string; details?: string } | null;
+  validatedByUserId?: string | null;
 }
 
 export default function WorklistPage() {
@@ -36,16 +41,7 @@ export default function WorklistPage() {
     } else if (filter === 'validated') {
       filtered = filtered.filter(req => req.statut === 'VALIDE' || req.statut === 'ARCHIVE');
     }
-    if (searchQuery.trim() !== '') {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(req =>
-        req.anapathId.toLowerCase().includes(query) ||
-        req.patientId.toLowerCase().includes(query) ||
-        req.typeExamen.toLowerCase().includes(query) ||
-        req.statut.toLowerCase().includes(query)
-      );
-    }
-    setFilteredRequests(filtered);
+    setFilteredRequests(filterAndSortAnapathRequests(filtered, searchQuery));
   }, [searchQuery, filter, requests]);
 
   const fetchData = async () => {
@@ -111,13 +107,20 @@ export default function WorklistPage() {
                 </thead>
                 <tbody className="divide-y divide-outline-variant/10">
                   {filteredRequests.map((req) => (
-                    <tr key={req.id} className="hover:bg-slate-50/80 transition-colors group">
+                    <tr key={req.id} className={`hover:bg-slate-50/80 transition-colors group ${req.isExtemporane ? 'bg-red-50' : ''}`}>
                       <td className="p-4 font-mono font-bold text-primary">{req.anapathId}</td>
                       <td className="p-4 font-medium">{req.patientId}</td>
-                      <td className="p-4"><span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold">{getTypeLabel(req.typeExamen)}</span></td>
+                      <td className="p-4">
+                        <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold inline-flex items-center gap-1">
+                          {getTypeLabel(req.typeExamen)}
+                          {req.isExtemporane && (
+                            <span className="px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold stat-pulse">STAT</span>
+                          )}
+                        </span>
+                      </td>
                       <td className="p-4 text-xs text-slate-500">{req.prelevement?.site || '-'}</td>
                       <td className="p-4"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${statusColors[req.statut] || 'bg-gray-100 text-gray-700'}`}>{statusLabels[req.statut] || req.statut}</span></td>
-                      <td className="p-4 text-slate-500 text-xs">{new Date(req.createdAt).toLocaleDateString('fr-FR')}</td>
+                      <td className="p-4 text-slate-500 text-xs">{formatDate(req.createdAt)}</td>
                       <td className="p-4 text-center">
                         <Link href={`/worklist/${req.id}`} className="p-2 text-slate-400 hover:text-primary transition-colors inline-block">
                           <span className="material-symbols-outlined text-base">visibility</span>

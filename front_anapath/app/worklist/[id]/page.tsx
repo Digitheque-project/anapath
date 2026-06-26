@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import axios from 'axios';
+import { formatDateLong } from '@/lib/dateFormat';
+import { getServiceDisplayName } from '@/lib/serviceDisplay';
 import { statusLabels, statusColors } from '@/lib/statusLabels';
 
 interface AnapathRequest {
@@ -19,6 +21,7 @@ interface AnapathRequest {
     description: string;
   } | null;
   createdAt: string;
+  episodeId?: string | null;
 }
 
 function extractValue(description: string | undefined, key: string): string {
@@ -47,15 +50,11 @@ export default function WorklistDetailPage() {
     fullName: 'RANDRIANTOANDRO N.',
     sex: 'Féminin',
     age: 34,
-    sampleDate: request
-      ? new Date(request.createdAt).toLocaleDateString('fr-FR', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
-      : '',
+    sampleDate: request ? formatDateLong(request.createdAt) : '',
     site: request?.prelevement?.site || '',
-    prescriber: 'Dr. Rakotoarisoa Jean - Service de Chirurgie',
+    requestingService: request
+      ? getServiceDisplayName({ episodeId: request.episodeId })
+      : 'Service inconnu',
   };
 
   useEffect(() => {
@@ -182,6 +181,10 @@ export default function WorklistDetailPage() {
                     {request.typeExamen === 'POC' && 'POC'}
                     {request.typeExamen === 'EXTEMPORANE_STAT' && 'Extemporané'}
                   </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Service demandeur</p>
+                  <p className="font-medium text-on-surface">{patientInfo.requestingService}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">Date Prélèvement</p>
