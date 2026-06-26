@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AnapathModule } from './anapath/anapath.module';
 import { NotificationModule } from './notification/notification.module';
+import { ExternalModule } from './external/external.module';
 import { AnapathRequest } from './anapath/entities/anapath-request.entity';
 import { NotificationEntity } from './notification/notification.entity';
 
@@ -28,6 +29,7 @@ import { NotificationEntity } from './notification/notification.entity';
     }),
     AnapathModule,
     NotificationModule,
+    ExternalModule, // ← Ajout du module externe
   ],
   controllers: [AppController],
   providers: [AppService],
