@@ -5,8 +5,6 @@ import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { formatDate } from '@/lib/dateFormat';
 import {
   getMondayOfWeek,
@@ -17,6 +15,8 @@ import {
   parseWeekInputValue,
 } from '@/lib/weekUtils';
 import { statusLabels } from '@/lib/statusLabels';
+import { getServiceDisplayName } from '@/lib/serviceDisplay';
+import { generateReportPDF, getTypeLabel, type ReportPdfData } from '@/lib/generatePDF';
 
 interface AnapathRequest {
   id: string;
@@ -26,6 +26,7 @@ interface AnapathRequest {
   statut: string;
   createdAt: string;
   validatedAt: string | null;
+  episodeId?: string | null;
 }
 
 interface Statistics {
@@ -125,132 +126,13 @@ export default function ReportsPage() {
     setStats({ total, byType, byStatus, monthlyData, topDiagnostics, tatMoyen });
   };
 
-  const exportToPDF = () => {
-    const doc = new jsPDF();
-    const date = formatDate(new Date());
-    let yOffset = 20;
-
-    // Titre
-    doc.setFontSize(18);
-    doc.setTextColor(0, 71, 141);
-    doc.text('Rapport Anapath - Statistiques', 14, yOffset);
-    yOffset += 10;
-
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Généré le ${date}`, 14, yOffset);
-    yOffset += 8;
-
-    // === 1. KPIs ===
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Total examens : ${stats.total}`, 14, yOffset);
-    yOffset += 6;
-    doc.text(`En attente : ${stats.byStatus['CREEE'] || 0}`, 14, yOffset);
-    yOffset += 6;
-    doc.text(`Validés : ${stats.byStatus['VALIDE'] || 0}`, 14, yOffset);
-    yOffset += 6;
-    doc.text(`Délai moyen TAT : ${stats.tatMoyen.toFixed(1)} jours`, 14, yOffset);
-    yOffset += 10;
-
-    // === 2. Volume mensuel ===
-    doc.setFontSize(14);
-    doc.setTextColor(0, 71, 141);
-    doc.text('Volume mensuel', 14, yOffset);
-    yOffset += 6;
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
-
-    const monthlyTable = stats.monthlyData.map(item => [item.month, item.count.toString()]);
-    autoTable(doc, {
-      startY: yOffset,
-      head: [['Mois', 'Nombre']],
-      body: monthlyTable,
-      theme: 'plain',
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [0, 71, 141], textColor: [255, 255, 255] },
-      margin: { left: 14, right: 14 },
-    });
-    yOffset = (doc as any).lastAutoTable.finalY + 8;
-
-    // === 3. Répartition par type ===
-    doc.setFontSize(14);
-    doc.setTextColor(0, 71, 141);
-    doc.text('Répartition par type d\'examen', 14, yOffset);
-    yOffset += 6;
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
-
-    const typeRows = Object.entries(stats.byType).map(([type, count]) => {
-      const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
-      return [type, count.toString(), `${pct}%`];
-    });
-    autoTable(doc, {
-      startY: yOffset,
-      head: [['Type', 'Nombre', 'Pourcentage']],
-      body: typeRows,
-      theme: 'plain',
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [0, 71, 141], textColor: [255, 255, 255] },
-      margin: { left: 14, right: 14 },
-    });
-    yOffset = (doc as any).lastAutoTable.finalY + 8;
-
-    // === 4. Top diagnostics CIM-10 ===
-    doc.setFontSize(14);
-    doc.setTextColor(0, 71, 141);
-    doc.text('Top diagnostics CIM-10', 14, yOffset);
-    yOffset += 6;
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
-
-    const diagRows = stats.topDiagnostics.map(d => [d.code, d.name, d.count.toString()]);
-    autoTable(doc, {
-      startY: yOffset,
-      head: [['Code', 'Diagnostic', 'Occurrences']],
-      body: diagRows,
-      theme: 'plain',
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [0, 71, 141], textColor: [255, 255, 255] },
-      margin: { left: 14, right: 14 },
-    });
-    yOffset = (doc as any).lastAutoTable.finalY + 8;
-
-    // === 5. Liste des demandes ===
-    doc.addPage();
-    doc.setFontSize(14);
-    doc.setTextColor(0, 71, 141);
-    doc.text('Liste des demandes', 14, 20);
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
-
-    const tableData = filteredRequests.map(req => [
-      req.anapathId,
-      req.patientId,
-      req.typeExamen,
-      req.statut,
-      formatDate(req.createdAt)
-    ]);
-
-    autoTable(doc, {
-      startY: 30,
-      head: [['ID PARA', 'Patient', 'Type', 'Statut', 'Date']],
-      body: tableData,
-      theme: 'striped',
-      headStyles: { fillColor: [0, 71, 141], textColor: [255, 255, 255] },
-      margin: { left: 14, right: 14 },
-    });
-
-    doc.save(`rapport-anapath-${date}.pdf`);
-  };
-
   const getFilteredData = () => {
     if (period === 'month') return stats.monthlyData.slice(-1);
     if (period === 'quarter') return stats.monthlyData.slice(-3);
     return stats.monthlyData;
   };
 
-  const maxCount = Math.max(...stats.monthlyData.map(d => d.count), 1);
+  const maxCount = Math.max(...stats.monthlyData.map((d) => d.count), 1);
 
   const weeklyRequests = requests
     .filter((req) => isDateInWeek(req.createdAt, weekStart))
@@ -273,73 +155,62 @@ export default function ReportsPage() {
   const weeklyDailyVolume = getDailyVolumeForWeek(weeklyRequests, weekStart);
   const weeklyMaxCount = Math.max(...weeklyDailyVolume.map((d) => d.count), 1);
 
-  const exportWeeklyPDF = () => {
-    const doc = new jsPDF();
-    const label = formatWeekLabel(weekStart);
-    let y = 20;
+  const mapToReportRow = (req: AnapathRequest) => ({
+    anapathId: req.anapathId,
+    patientId: req.patientId,
+    typeExamen: req.typeExamen,
+    typeLabel: getTypeLabel(req.typeExamen),
+    statut: req.statut,
+    statutLabel: statusLabels[req.statut] || req.statut,
+    prescriber: getServiceDisplayName({ episodeId: req.episodeId }),
+    createdAt: req.createdAt,
+  });
 
-    doc.setFontSize(18);
-    doc.setTextColor(0, 71, 141);
-    doc.text('Rapport hebdomadaire Anapath', 14, y);
-    y += 8;
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Semaine : ${label}`, 14, y);
-    y += 10;
-
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Total examens : ${weeklyRequests.length}`, 14, y);
-    y += 6;
-    doc.text(`Validés : ${weeklyValidated.length}`, 14, y);
-    y += 6;
-    doc.text(`En attente : ${weeklyPending.length}`, 14, y);
-    y += 6;
-    doc.text(`Délai moyen : ${weeklyAvgDelay.toFixed(1)} jours`, 14, y);
-    y += 10;
-
-    const volumeRows = weeklyDailyVolume.map((d) => [d.day, d.count.toString()]);
-    autoTable(doc, {
-      startY: y,
-      head: [['Jour', 'Volume']],
-      body: volumeRows,
-      theme: 'plain',
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [0, 71, 141], textColor: [255, 255, 255] },
-      margin: { left: 14, right: 14 },
-    });
-    y = (doc as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
-
-    const tableData = weeklyRequests.map((req) => [
-      req.anapathId,
-      req.patientId,
-      req.typeExamen,
-      req.statut,
-      formatDate(req.createdAt),
-    ]);
-    autoTable(doc, {
-      startY: y,
-      head: [['ID PARA', 'Patient', 'Type', 'Statut', 'Date']],
-      body: tableData,
-      theme: 'striped',
-      headStyles: { fillColor: [0, 71, 141], textColor: [255, 255, 255] },
-      margin: { left: 14, right: 14 },
-    });
-
-    doc.save(`rapport-hebdo-anapath-${toWeekInputValue(weekStart)}.pdf`);
+  const getPeriodLabel = () => {
+    const now = new Date();
+    const months = [
+      'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+    ];
+    if (period === 'month') return `Rapport mensuel : ${months[now.getMonth()]} ${now.getFullYear()}`;
+    if (period === 'quarter') {
+      const q = Math.floor(now.getMonth() / 3) + 1;
+      return `Rapport trimestriel : T${q} ${now.getFullYear()}`;
+    }
+    return `Rapport annuel : ${now.getFullYear()}`;
   };
 
-  const getTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      'BIOPSIE': 'Biopsie',
-      'FCV_PAP': 'FCV / Pap test',
-      'CYT0PONCTION': 'Cytoponction',
-      'LIQUIDE': 'Liquide',
-      'EXTEMPORANE_STAT': 'Extemporané',
-      'POS': 'POS',
-      'POC': 'POC',
-    };
-    return labels[type] || type;
+  const buildReportPdfData = (weeklyOnly = false): ReportPdfData => ({
+    period: period as ReportPdfData['period'],
+    periodLabel: weeklyOnly ? `Semaine du ${formatWeekLabel(weekStart)}` : getPeriodLabel(),
+    stats,
+    weekly: {
+      weekLabel: formatWeekLabel(weekStart),
+      total: weeklyRequests.length,
+      validated: weeklyValidated.length,
+      pending: weeklyPending.length,
+      avgDelay: weeklyAvgDelay,
+      dailyVolume: weeklyDailyVolume,
+      requests: weeklyRequests.map(mapToReportRow),
+    },
+    allRequests: filteredRequests.map(mapToReportRow),
+    weeklyOnly,
+  });
+
+  const exportToPDF = async () => {
+    try {
+      await generateReportPDF(buildReportPdfData(false));
+    } catch {
+      alert('Erreur lors de la génération du rapport PDF.');
+    }
+  };
+
+  const exportWeeklyPDF = async () => {
+    try {
+      await generateReportPDF(buildReportPdfData(true));
+    } catch {
+      alert('Erreur lors de la génération du rapport hebdomadaire PDF.');
+    }
   };
 
   if (loading) {

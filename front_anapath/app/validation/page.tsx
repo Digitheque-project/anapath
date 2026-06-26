@@ -8,12 +8,11 @@ import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
 import { formatDateLong, formatDateTime } from '@/lib/dateFormat';
 import { getServiceDisplayName } from '@/lib/serviceDisplay';
-
-declare global {
-  interface Window {
-    html2pdf: any;
-  }
-}
+import {
+  generateExamPDF,
+  DEFAULT_PERSONNEL,
+  getTypeLabel,
+} from '@/lib/generatePDF';
 
 interface AnapathRequest {
   id: string;
@@ -64,16 +63,6 @@ export default function ValidationPage() {
     requestingService: selectedRequest
       ? getServiceDisplayName({ episodeId: selectedRequest.episodeId })
       : 'Service inconnu',
-  };
-
-  const personnel = {
-    chefService: 'P. ANDRIAMAMPIONONA T. Francine',
-    chefTravaux: 'Dr LAZA Odilon',
-    specialiste: 'Dr RAZAFIMAHEFA Joëlle',
-    interneQualifiant: '',
-    histotechniciens: ['MILIARISOA Pergaudine', 'RAVONINTSALAMA Sarindra'],
-    secretaire: 'RAHERIMAMINIAINA Narison',
-    appui: 'RASOARIVONJY Nadia',
   };
 
   useEffect(() => {
@@ -254,19 +243,6 @@ export default function ValidationPage() {
     }
   };
 
-  const getTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      BIOPSIE: 'Biopsie',
-      FCV_PAP: 'FCV / Pap test',
-      CYT0PONCTION: 'Cytoponction',
-      LIQUIDE: 'Liquide',
-      EXTEMPORANE_STAT: 'Extemporané',
-      POS: 'POS',
-      POC: 'POC',
-    };
-    return labels[type] || type;
-  };
-
   const isFormValid = () => {
     return (
       resultData.details.trim() !== '' &&
@@ -291,157 +267,45 @@ export default function ValidationPage() {
   };
 
   // ============================================================
-  // EXPORT PDF (marges 1cm, colonnes 1/3 - 2/3)
+  // EXPORT PDF
   // ============================================================
-  const exportPDF = () => {
+  const exportPDF = async () => {
     if (!selectedRequest) {
       alert('Aucun examen sélectionné.');
       return;
     }
 
-    if (typeof window.html2pdf === 'undefined') {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      document.head.appendChild(script);
-      script.onload = () => {
-        generatePDF();
-      };
-      script.onerror = () => alert('Erreur de chargement de la bibliothèque PDF.');
-    } else {
-      generatePDF();
+    try {
+      await generateExamPDF({
+        anapathId: selectedRequest.anapathId,
+        patientId: selectedRequest.patientId,
+        typeExamen: selectedRequest.typeExamen,
+        typeExamenLabel: getTypeLabel(selectedRequest.typeExamen),
+        createdAt: selectedRequest.createdAt,
+        validatedAt: null,
+        patientFullName: patientInfo.fullName,
+        patientAge: patientInfo.age,
+        patientSex: patientInfo.sex,
+        sampleDate: patientInfo.sampleDate,
+        prelevementSite: selectedRequest.prelevement?.site,
+        prelevementDescription: selectedRequest.prelevement?.description,
+        requestingService: patientInfo.requestingService,
+        prescriber: 'Non renseigné',
+        urgence: selectedRequest.isExtemporane ? 'STAT' : 'Normale',
+        clinicalData: {
+          treatmentType: treatmentType || selectedRequest.prelevement?.clinicalData?.treatmentType,
+          suspicion: suspicion || selectedRequest.prelevement?.clinicalData?.suspicion,
+          clinicalNotes: clinicalNotes || selectedRequest.prelevement?.clinicalData?.clinicalNotes,
+        },
+        resultDetails: resultData.details,
+        resultConclusion: resultData.conclusion,
+        signature: signature.signature,
+        ordreProfessionnelNumber: signature.ordreProfessionnelNumber,
+        personnel: DEFAULT_PERSONNEL,
+      });
+    } catch {
+      alert('Erreur lors de la génération du PDF.');
     }
-  };
-
-  const generatePDF = () => {
-    if (!selectedRequest) {
-      alert('Aucun examen sélectionné.');
-      return;
-    }
-
-    const content = document.createElement('div');
-    content.id = 'pdf-content';
-    content.style.padding = '10px'; // 1cm de marge interne
-    content.style.fontFamily = 'Arial, sans-serif';
-    content.style.fontSize = '12px';
-    content.style.color = '#000';
-    content.style.width = '100%';
-    content.style.boxSizing = 'border-box';
-
-    // En-tête
-    const header = document.createElement('div');
-    header.style.display = 'flex';
-    header.style.justifyContent = 'space-between';
-    header.style.alignItems = 'center';
-    header.style.borderBottom = '2px solid #00478d';
-    header.style.paddingBottom = '10px';
-    header.style.marginBottom = '20px';
-
-    const leftLogo = document.createElement('div');
-    leftLogo.innerHTML = `
-      <svg width="70" height="70" viewBox="0 0 100 100">
-        <rect width="100" height="100" fill="#00478d" rx="10"/>
-        <text x="50" y="55" text-anchor="middle" fill="white" font-size="12" font-weight="bold">CHUA</text>
-        <text x="50" y="70" text-anchor="middle" fill="white" font-size="8">Fianarantsoa</text>
-      </svg>
-    `;
-    leftLogo.style.width = '70px';
-    leftLogo.style.height = '70px';
-
-    const centerText = document.createElement('div');
-    centerText.style.textAlign = 'center';
-    centerText.innerHTML = `
-      <div style="font-weight:bold; font-size:14px;">REPUBLIKAN'I MADAGASIKARA</div>
-      <div style="font-size:11px; margin-top:2px;">Fitiavana-Tanindrazana-Fandrosoana</div>
-      <div style="font-size:10px; margin-top:4px;">MINISTÈRE DE LA SANTÉ PUBLIQUE</div>
-      <div style="font-size:10px;">CHU ANDRAINJATO - FIANARANTSOA</div>
-    `;
-
-    const rightLogo = document.createElement('div');
-    rightLogo.innerHTML = `
-      <svg width="70" height="70" viewBox="0 0 100 100">
-        <rect width="100" height="100" fill="#c20000" rx="10"/>
-        <text x="50" y="55" text-anchor="middle" fill="white" font-size="12" font-weight="bold">ANAPATH</text>
-        <text x="50" y="70" text-anchor="middle" fill="white" font-size="8">Laboratoire</text>
-      </svg>
-    `;
-    rightLogo.style.width = '70px';
-    rightLogo.style.height = '70px';
-
-    header.appendChild(leftLogo);
-    header.appendChild(centerText);
-    header.appendChild(rightLogo);
-
-    // Corps : deux colonnes 1/3 - 2/3
-    const body = document.createElement('div');
-    body.style.display = 'flex';
-    body.style.gap = '20px';
-    body.style.marginTop = '10px';
-
-    // Colonne gauche : 1/3
-    const leftCol = document.createElement('div');
-    leftCol.style.flex = '1';
-    leftCol.style.borderRight = '1px solid #ccc';
-    leftCol.style.paddingRight = '15px';
-    const clinicalData = selectedRequest.prelevement?.clinicalData || {};
-    leftCol.innerHTML = `
-      <h3 style="color:#00478d; font-size:13px; margin-top:0;">PERSONNEL DU SERVICE</h3>
-      <p><strong>Chef de service :</strong> ${personnel.chefService}</p>
-      <p><strong>Chef de travaux :</strong> ${personnel.chefTravaux}</p>
-      <p><strong>Spécialiste :</strong> ${personnel.specialiste}</p>
-      <p><strong>Interne qualifiant :</strong><br/>${personnel.interneQualifiant || '_________________'}</p>
-      <p><strong>Histotechniciens :</strong><br/>
-        ${personnel.histotechniciens.map(n => '&nbsp;&nbsp;• ' + n).join('<br/>')}
-      </p>
-      <p><strong>Secrétaire :</strong> ${personnel.secretaire}</p>
-      <p><strong>Personnel d'appui :</strong> ${personnel.appui}</p>
-    `;
-
-    // Colonne droite : 2/3
-    const rightCol = document.createElement('div');
-    rightCol.style.flex = '2';
-    rightCol.innerHTML = `
-      <h3 style="color:#00478d; font-size:13px; margin-top:0;">COMPTE RENDU D'EXAMEN</h3>
-      <p><strong>IPP :</strong> ${ippNumber || '_________________'}</p>
-      <p><strong>Patient :</strong> ${patientInfo.fullName} (${patientInfo.age} ans, ${patientInfo.sex})</p>
-      <p><strong>Patient ID :</strong> ${selectedRequest.patientId}</p>
-      <p><strong>Type d'examen :</strong> ${getTypeLabel(selectedRequest.typeExamen)}</p>
-      <p><strong>Date prélèvement :</strong> ${patientInfo.sampleDate}</p>
-      <p><strong>Site de prélèvement :</strong> ${selectedRequest.prelevement?.site || '-'}</p>
-      <p><strong>Service demandeur :</strong> ${patientInfo.requestingService}</p>
-      <p><strong>Type de traitement :</strong> ${clinicalData.treatmentType || '_________________'}</p>
-      <p><strong>Suspicion diagnostique :</strong> ${clinicalData.suspicion || '_________________'}</p>
-      <p><strong>Renseignements cliniques :</strong> ${clinicalData.clinicalNotes || '_________________'}</p>
-      <hr/>
-      <p><strong>RÉSULTAT :</strong><br/>${resultData.details || '_________________'}</p>
-      <p><strong>CONCLUSION :</strong><br/>${resultData.conclusion || '_________________'}</p>
-      <hr/>
-      <p><strong>Signature électronique :</strong> ${signature.signature || '_________________'}</p>
-      <p><strong>N° Ordre professionnel :</strong> ${signature.ordreProfessionnelNumber || '_________________'}</p>
-      <p style="margin-top:20px;"><strong>Fait à Fianarantsoa, le ${formatDateLong(new Date())}</strong></p>
-    `;
-
-    body.appendChild(leftCol);
-    body.appendChild(rightCol);
-    content.appendChild(header);
-    content.appendChild(body);
-
-    const footer = document.createElement('div');
-    footer.style.textAlign = 'center';
-    footer.style.marginTop = '30px';
-    footer.style.fontSize = '10px';
-    footer.style.color = '#666';
-    footer.textContent = 'Document généré par le système Anapath - CHU Andrainjato';
-    content.appendChild(footer);
-
-    const opt = {
-      margin: [10, 10, 10, 10], // 1cm
-      filename: `Rapport_Anapath_${selectedRequest.anapathId}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, letterRendering: true, useCORS: true, logging: false },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    };
-
-    window.html2pdf().set(opt).from(content).save();
   };
 
   if (loading) {
