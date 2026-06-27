@@ -4,6 +4,9 @@ export function getServiceDisplayName(data?: {
   metadata?: Record<string, unknown> | null;
 }): string {
   const meta = data?.metadata;
+  if (meta?.serviceNom && String(meta.serviceNom).trim()) {
+    return String(meta.serviceNom);
+  }
   if (meta?.sourceServiceName && String(meta.sourceServiceName).trim()) {
     return String(meta.sourceServiceName);
   }
@@ -19,5 +22,15 @@ export function getServiceDisplayName(data?: {
   if (data?.episodeId && String(data.episodeId).trim()) {
     return String(data.episodeId);
   }
-  return 'Service inconnu';
+  return 'N/A';
+}
+
+export function getChuDisplayName(metadata?: Record<string, unknown> | null): string {
+  if (metadata?.chuNom && String(metadata.chuNom).trim()) {
+    return String(metadata.chuNom);
+  }
+  if (metadata?.chuId && String(metadata.chuId).trim()) {
+    return String(metadata.chuId);
+  }
+  return 'N/A';
 }

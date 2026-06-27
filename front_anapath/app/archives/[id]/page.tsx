@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import axios from 'axios';
 import { formatDateLong, formatDateTime, formatDate } from '@/lib/dateFormat';
-import { getServiceDisplayName } from '@/lib/serviceDisplay';
+import { getServiceDisplayName, getChuDisplayName } from '@/lib/serviceDisplay';
 import {
   generateExamPDF,
   DEFAULT_PERSONNEL,
@@ -39,6 +39,7 @@ interface AnapathRequest {
   signedHash: string | null;
   createdAt: string;
   episodeId?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export default function ArchiveDetailPage() {
@@ -56,8 +57,9 @@ export default function ArchiveDetailPage() {
     sampleDate: request ? formatDateLong(request.createdAt) : '',
     site: request?.prelevement?.site || '',
     requestingService: request
-      ? getServiceDisplayName({ episodeId: request.episodeId })
-      : 'Service inconnu',
+      ? getServiceDisplayName({ metadata: request.metadata, episodeId: request.episodeId })
+      : 'N/A',
+    chuName: request ? getChuDisplayName(request.metadata) : 'N/A',
   };
 
   useEffect(() => {
@@ -99,6 +101,7 @@ export default function ArchiveDetailPage() {
         prelevementSite: request.prelevement?.site,
         prelevementDescription: request.prelevement?.description,
         requestingService: patientInfo.requestingService,
+        chuName: patientInfo.chuName,
         prescriber: 'Non renseigné',
         urgence: request.isExtemporane ? 'STAT' : 'Normale',
         clinicalData: clinicalDataExport,
@@ -182,6 +185,13 @@ export default function ArchiveDetailPage() {
               <div>
                 <p className="text-xs text-slate-400">Service demandeur</p>
                 <p className="font-medium">{patientInfo.requestingService}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2 mt-3">
+              <span className="material-symbols-outlined text-secondary">local_hospital</span>
+              <div>
+                <p className="text-xs text-slate-400">CHU</p>
+                <p className="font-medium">{patientInfo.chuName}</p>
               </div>
             </div>
             <hr className="border-outline-variant my-3" />

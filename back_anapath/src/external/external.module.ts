@@ -1,13 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ExternalController } from './external.controller';
+import { ExternalService } from './external.service';
 import { AnapathModule } from '../anapath/anapath.module';
-import { NotificationModule } from '../notification/notification.module';
+import { ChuClient } from '../common/clients/chu.client';
 
 @Module({
-  imports: [
-    AnapathModule,      // Pour utiliser AnapathService
-    NotificationModule, // Pour utiliser NotificationService
-  ],
+  imports: [AnapathModule],
   controllers: [ExternalController],
+  providers: [ExternalService, ChuClient],
 })
 export class ExternalModule {}

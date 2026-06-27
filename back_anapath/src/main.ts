@@ -4,6 +4,10 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { Utf8Interceptor } from './common/interceptors/utf8.interceptor';
 import { Utf8Pipe } from './common/pipes/utf8.pipe';
+import { ChuClient } from './common/clients/chu.client';
+
+const ANAPATH_SERVICE_ID =
+  process.env.ANAPATH_SERVICE_ID ?? '66e6d562-a772-40f1-a19a-d3385d862419';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -52,7 +56,15 @@ async function bootstrap() {
   
   const port = process.env.PORT || 3001;
   await app.listen(port);
-  
+
+  const chuClient = new ChuClient();
+  const serviceInfo = await chuClient.getAnapathServiceInfo();
+  if (serviceInfo) {
+    console.log(`✅ Service connecté : ${serviceInfo.name} (ID: ${ANAPATH_SERVICE_ID})`);
+  } else {
+    console.warn('⚠️ Service CHU indisponible au démarrage - mode dégradé');
+  }
+
   console.log(`🚀 Backend Anapath démarré sur http://localhost:${port}`);
   console.log(`📚 Documentation Swagger disponible sur http://localhost:${port}/api/docs`);
 }

@@ -62,6 +62,9 @@ export class AnapathRequest {
   prelevement: object;
 
   @Column({ type: 'jsonb', nullable: true })
+  metadata: Record<string, unknown>;
+
+  @Column({ type: 'jsonb', nullable: true })
   resultat: object;
 
   @Column({ type: 'enum', enum: Statut, default: Statut.CREEE })

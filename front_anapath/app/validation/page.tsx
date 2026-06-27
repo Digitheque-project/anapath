@@ -7,7 +7,7 @@ import TopBar from '@/components/TopBar';
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
 import { formatDateLong, formatDateTime } from '@/lib/dateFormat';
-import { getServiceDisplayName } from '@/lib/serviceDisplay';
+import { getServiceDisplayName, getChuDisplayName } from '@/lib/serviceDisplay';
 import {
   generateExamPDF,
   DEFAULT_PERSONNEL,
@@ -33,6 +33,7 @@ interface AnapathRequest {
   createdAt: string;
   isExtemporane?: boolean;
   episodeId?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export default function ValidationPage() {
@@ -61,8 +62,9 @@ export default function ValidationPage() {
     sampleDate: selectedRequest ? formatDateLong(selectedRequest.createdAt) : '',
     site: selectedRequest?.prelevement?.site || '',
     requestingService: selectedRequest
-      ? getServiceDisplayName({ episodeId: selectedRequest.episodeId })
-      : 'Service inconnu',
+      ? getServiceDisplayName({ metadata: selectedRequest.metadata, episodeId: selectedRequest.episodeId })
+      : 'N/A',
+    chuName: selectedRequest ? getChuDisplayName(selectedRequest.metadata) : 'N/A',
   };
 
   useEffect(() => {
@@ -290,6 +292,7 @@ export default function ValidationPage() {
         prelevementSite: selectedRequest.prelevement?.site,
         prelevementDescription: selectedRequest.prelevement?.description,
         requestingService: patientInfo.requestingService,
+        chuName: patientInfo.chuName,
         prescriber: 'Non renseigné',
         urgence: selectedRequest.isExtemporane ? 'STAT' : 'Normale',
         clinicalData: {
@@ -409,6 +412,10 @@ export default function ValidationPage() {
                         <div>
                           <p className="text-xs text-on-surface-variant">Service demandeur</p>
                           <p className="font-medium text-on-surface">{patientInfo.requestingService}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-on-surface-variant">CHU</p>
+                          <p className="font-medium text-on-surface">{patientInfo.chuName}</p>
                         </div>
                       </div>
                       <hr className="border-outline-variant my-3" />

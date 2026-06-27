@@ -1,0 +1,83 @@
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
+
+@Injectable()
+export class ChuClient {
+  private readonly baseUrl: string;
+  private readonly anapathServiceId: string;
+  private readonly timeout = 5000;
+
+  constructor(configService?: ConfigService) {
+    this.baseUrl = (
+      configService?.get<string>('CHU_SERVICE_URL') ??
+      process.env.CHU_SERVICE_URL ??
+      ''
+    ).replace(/\/$/, '');
+    this.anapathServiceId =
+      configService?.get<string>('ANAPATH_SERVICE_ID') ??
+      process.env.ANAPATH_SERVICE_ID ??
+      '66e6d562-a772-40f1-a19a-d3385d862419';
+  }
+
+  async getChu(chuId: string): Promise<any> {
+    try {
+      const { data } = await axios.get(`${this.baseUrl}/service-chu/chu/${chuId}`, {
+        timeout: this.timeout,
+      });
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  async getAllChus(): Promise<any[]> {
+    try {
+      const { data } = await axios.get(`${this.baseUrl}/service-chu/chu`, {
+        timeout: this.timeout,
+      });
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async getService(serviceId: string): Promise<any> {
+    try {
+      const { data } = await axios.get(`${this.baseUrl}/service-chu/service/${serviceId}`, {
+        timeout: this.timeout,
+      });
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  async getServicesByChu(chuId: string): Promise<any[]> {
+    try {
+      const { data } = await axios.get(`${this.baseUrl}/service-chu/service`, {
+        params: { chuId },
+        timeout: this.timeout,
+      });
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async getServiceInChu(chuId: string, serviceId: string): Promise<any> {
+    try {
+      const { data } = await axios.get(
+        `${this.baseUrl}/service-chu/service/chu/${chuId}/service/${serviceId}`,
+        { timeout: this.timeout },
+      );
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  async getAnapathServiceInfo(): Promise<any> {
+    return this.getService(this.anapathServiceId);
+  }
+}

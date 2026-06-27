@@ -6,106 +6,64 @@ import axios from 'axios';
 export class NotificationClient {
   private readonly baseUrl: string;
   private readonly serviceId: string;
+  private readonly timeout = 5000;
 
   constructor(private configService: ConfigService) {
-    const raw = this.configService.get<string>('NOTIFICATION_API_URL') || '';
-    // service-notification expose /notifications (pas /api/notifications)
-    this.baseUrl = raw.replace(/\/api\/?$/, '').replace(/\/$/, '');
-    this.serviceId = this.configService.get<string>('ANAPATH_ID') || 'anapath-service';
+    this.baseUrl = (
+      this.configService.get<string>('NOTIF_SERVICE_URL') ??
+      process.env.NOTIF_SERVICE_URL ??
+      'https://prescription-back-7m7a.onrender.com'
+    ).replace(/\/$/, '');
+    this.serviceId =
+      this.configService.get<string>('ANAPATH_SERVICE_ID') ??
+      process.env.ANAPATH_SERVICE_ID ??
+      '66e6d562-a772-40f1-a19a-d3385d862419';
   }
 
-  private getHeaders() {
-    return {
-      'Content-Type': 'application/json',
-      'X-Service-ID': this.serviceId,
-    };
-  }
-
-  async sendNotification(notification: {
-    type: string;
-    motif: string;
-    urgence?: number;
-    sourceServiceId?: string;
-    sourceServiceName?: string;
-    targetServiceId?: string;
-    targetServiceName?: string;
-    patientId?: string;
-    payload?: Record<string, any>;
-  }) {
-    if (!this.baseUrl) {
-      console.warn('⚠️ NOTIFICATION_API_URL non définie, notification non envoyée');
-      return null;
-    }
-
+  async getNotificationsService(serviceId: string): Promise<any[]> {
     try {
-      const payload = {
-        type: notification.type,
-        motif: notification.motif,
-        urgence: notification.urgence ?? 3,
-        sourceServiceId: notification.sourceServiceId ?? this.serviceId,
-        sourceServiceName: notification.sourceServiceName ?? 'Anapath',
-        targetServiceId: notification.targetServiceId,
-        targetServiceName: notification.targetServiceName,
-        patientId: notification.patientId,
-        payload: notification.payload,
-      };
-
-      const response = await axios.post(`${this.baseUrl}/notifications`, payload, {
-        headers: this.getHeaders(),
+      const { data } = await axios.get(`${this.baseUrl}/notifications/service/${serviceId}`, {
+        timeout: this.timeout,
       });
-      console.log(`✅ Notification envoyée: ${notification.motif}`);
-      return response.data;
-    } catch (error) {
-      console.error(`❌ Erreur envoi notification:`, error.message);
-      return null;
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
     }
   }
 
-  async sendStatAlert(
-    anapathId: string,
-    patientId: string,
-    message: string,
-    targetServiceId: string,
-  ) {
-    return this.sendNotification({
-      type: 'DEMANDE_EXAMEN',
-      motif: `🚨 ALERTE STAT - ${message} - ID: ${anapathId} - Patient: ${patientId}`,
-      urgence: 5,
-      targetServiceId,
-      targetServiceName: 'Destinataire',
-      patientId,
-      payload: { anapathId, patientId, type: 'extemporane' },
-    });
+  async getUnreadNotifications(destinataire: string): Promise<any[]> {
+    try {
+      const { data } = await axios.get(`${this.baseUrl}/notifications/non-lues/${destinataire}`, {
+        timeout: this.timeout,
+      });
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
   }
 
-  async sendResultatDisponible(
-    anapathId: string,
-    patientId: string,
-    targetServiceId: string,
-  ) {
-    return this.sendNotification({
-      type: 'RESULTAT_EXAMEN',
-      motif: `Résultat disponible pour l'examen ${anapathId} (patient ${patientId})`,
-      urgence: 4,
-      targetServiceId,
-      patientId,
-      payload: { anapathId, patientId },
-    });
+  async markAsRead(notificationId: string): Promise<void> {
+    try {
+      await axios.put(`${this.baseUrl}/notifications/${notificationId}/lire`, null, {
+        timeout: this.timeout,
+      });
+    } catch {
+      // mode dégradé — ne pas bloquer
+    }
   }
 
-  async sendValidationNotification(
-    anapathId: string,
-    patientId: string,
-    validateur: string,
-    targetServiceId: string,
-  ) {
-    return this.sendNotification({
-      type: 'AVIS_INTER_SERVICE',
-      motif: `Examen ${anapathId} validé par ${validateur}`,
-      urgence: 2,
-      targetServiceId,
-      patientId,
-      payload: { anapathId, patientId, validateur },
-    });
+  async getMesNotifications(): Promise<any[]> {
+    try {
+      const { data } = await axios.get(`${this.baseUrl}/notifications/mes-notifications`, {
+        timeout: this.timeout,
+      });
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  }
+
+  getAnapathServiceId(): string {
+    return this.serviceId;
   }
 }

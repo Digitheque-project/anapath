@@ -82,6 +82,7 @@ export interface ExamPdfData {
   prelevementSite?: string;
   prelevementDescription?: string;
   requestingService: string;
+  chuName?: string;
   prescriber?: string;
   urgence?: string;
   clinicalData?: {
@@ -286,6 +287,7 @@ function buildExamReportHtml(data: ExamPdfData): string {
       <table style="width:100%;font-size:11px;border-collapse:collapse;">
         <tr><td style="padding:3px 0;"><strong>Prescripteur</strong></td><td>${escapeHtml(prescriber)}</td></tr>
         <tr><td style="padding:3px 0;"><strong>Service demandeur</strong></td><td>${escapeHtml(data.requestingService)}</td></tr>
+        <tr><td style="padding:3px 0;"><strong>CHU</strong></td><td>${escapeHtml(data.chuName || 'N/A')}</td></tr>
         <tr><td style="padding:3px 0;"><strong>Urgence</strong></td><td>${escapeHtml(urgence)}</td></tr>
       </table>
 

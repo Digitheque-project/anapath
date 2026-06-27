@@ -1,4 +1,4 @@
-import { IsEnum, IsString, IsOptional, IsBoolean, ValidateNested } from 'class-validator';
+import { IsEnum, IsString, IsOptional, IsBoolean, ValidateNested, IsObject } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { ExamenType } from '../entities/anapath-request.entity';
@@ -41,4 +41,9 @@ export class CreateAnapathDto {
   @ValidateNested()
   @Type(() => PrelevementDto)
   prelevement: PrelevementDto;
+
+  @ApiProperty({ required: false, description: 'Métadonnées enrichies (CHU, service, urgence)' })
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
 }
