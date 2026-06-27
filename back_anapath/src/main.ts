@@ -7,7 +7,7 @@ import { Utf8Pipe } from './common/pipes/utf8.pipe';
 import { ChuClient } from './common/clients/chu.client';
 
 const ANAPATH_SERVICE_ID =
-  process.env.ANAPATH_SERVICE_ID ?? '66e6d562-a772-40f1-a19a-d3385d862419';
+  process.env.ANAPATH_SERVICE_ID ?? '14a94274-db57-49e3-9375-1e642729b92b';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

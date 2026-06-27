@@ -17,7 +17,7 @@ export class ChuClient {
     this.anapathServiceId =
       configService?.get<string>('ANAPATH_SERVICE_ID') ??
       process.env.ANAPATH_SERVICE_ID ??
-      '66e6d562-a772-40f1-a19a-d3385d862419';
+      '14a94274-db57-49e3-9375-1e642729b92b';
   }
 
   async getChu(chuId: string): Promise<any> {
