@@ -12,6 +12,8 @@ export enum ExamenTypeExterne {
   CYT0PONCTION = 'CYT0PONCTION',
   LIQUIDE = 'LIQUIDE',
   BIOPSIE = 'BIOPSIE',
+  POS = 'POS',
+  POC = 'POC',
   EXTEMPORANE_STAT = 'EXTEMPORANE_STAT',
 }
 
@@ -23,36 +25,25 @@ export class CreatePrescriptionAnapathDto {
 
   @ApiProperty({ example: 'prescripteur-uuid' })
   @IsString()
-  @IsNotEmpty()
   prescripteurId: string;
 
-  @ApiProperty({
-    example: 'prescription-uuid',
-    required: false,
-    description: 'ID de la prescription créée côté service prescription (si transmis)',
-  })
-  @IsString()
+  @ApiProperty({ example: 'NORMALE', enum: ['NORMALE', 'URGENTE', 'STAT'] })
+  @IsEnum(['NORMALE', 'URGENTE', 'STAT'])
   @IsOptional()
-  prescriptionId?: string;
-
-  @ApiProperty({ enum: UrgenceLevel, default: UrgenceLevel.NORMALE })
-  @IsEnum(UrgenceLevel)
-  @IsOptional()
-  urgence?: UrgenceLevel;
+  urgence?: string;
 
   @ApiProperty({ example: 'Suspicion maligne', required: false })
   @IsString()
   @IsOptional()
   alertes?: string;
 
-  @ApiProperty({ enum: ExamenTypeExterne, example: 'BIOPSIE' })
-  @IsEnum(ExamenTypeExterne)
-  @IsNotEmpty()
-  typeExamen: ExamenTypeExterne;
+  @ApiProperty({ example: 'BIOPSIE', enum: ['FCV_PAP', 'CYT0PONCTION', 'LIQUIDE', 'BIOPSIE', 'POS', 'POC', 'EXTEMPORANE_STAT'] })
+  @IsEnum(['FCV_PAP', 'CYT0PONCTION', 'LIQUIDE', 'BIOPSIE', 'POS', 'POC', 'EXTEMPORANE_STAT'])
+  typeExamen: string;
 
   @ApiProperty({
     example: { organe: 'Foie', localisation: 'Lobe droit', nature: '3 fragments', fixateur: 'Formol 10%' },
-    description: 'Données spécifiques selon typeExamen',
+    required: false,
   })
   @IsObject()
   @IsOptional()

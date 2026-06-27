@@ -11,6 +11,7 @@ import {
   BadRequestException,
   UsePipes,
   ValidationPipe,
+  Headers,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -86,10 +87,22 @@ export class NotificationController {
   })
   @ApiResponse({ status: 400, description: 'Corps de requête invalide' })
   @HttpCode(HttpStatus.OK)
-  async receiveNotification(@Body() body: Record<string, unknown>) {
+  async receiveNotification(
+    @Body() body: Record<string, unknown>,
+    @Headers('x-service-id') serviceIdHeader?: string,
+  ) {
     const data = isServiceNotificationPayload(body)
       ? mapServiceNotificationInbound(body as unknown as ServiceNotificationInboundDto)
       : this.parseAnapathNotification(body);
+
+    if (serviceIdHeader) {
+      data.source = serviceIdHeader;
+      data.metadata = {
+        ...(data.metadata ?? {}),
+        sourceServiceId: serviceIdHeader,
+        serviceId: serviceIdHeader,
+      };
+    }
 
     this.logger.log(`📨 Notification reçue: ${data.type} - ${data.title}`);
 

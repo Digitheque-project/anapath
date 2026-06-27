@@ -1,7 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, HttpCode, Header } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Post, HttpCode, Header } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
 import { AnapathService } from './anapath.service';
-import { CreateAnapathDto } from './dto/create-anapath.dto';
 import { UpdateAnapathDto } from './dto/update-anapath.dto';
 import { ValidateAnapathDto } from './dto/validate-anapath.dto';
 import { AnapathRequest } from './entities/anapath-request.entity';
@@ -10,15 +9,6 @@ import { AnapathRequest } from './entities/anapath-request.entity';
 @Controller('anapath')
 export class AnapathController {
   constructor(private readonly service: AnapathService) {}
-
-  @Post()
-  @ApiOperation({ summary: 'Créer une nouvelle demande d\'examen' })
-  @ApiResponse({ status: 201, description: 'Demande créée avec succès', type: AnapathRequest })
-  @ApiResponse({ status: 400, description: 'Données invalides' })
-  @Header('Content-Type', 'application/json; charset=utf-8')
-  create(@Body() dto: CreateAnapathDto) {
-    return this.service.create(dto);
-  }
 
   @Get()
   @ApiOperation({ summary: 'Lister toutes les demandes' })
