@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, Post, HttpCode, Header } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Post, Body, HttpCode, Header } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
 import { AnapathService } from './anapath.service';
 import { UpdateAnapathDto } from './dto/update-anapath.dto';
