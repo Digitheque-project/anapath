@@ -1,38 +1,36 @@
 'use client';
-
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   getNotificationsAnapath,
   markNotificationAsRead,
 } from '@/lib/api';
 
-const POLL_INTERVAL_MS = 30_000;
-
-const priority: Record<string, number> = { STAT: 1, URGENTE: 2, NORMALE: 3 };
-
-function sortNotifications(notifs: any[]) {
+// Tri : STAT → URGENTE → NORMALE, puis date décroissante
+function sortNotifications(notifs: any[]): any[] {
+  const priority: Record<string, number> = {
+    STAT: 1, URGENTE: 2, NORMALE: 3,
+  };
   return [...notifs].sort((a, b) => {
-    const ua = a.urgence ?? a.metadata?.urgence ?? a.priority ?? 'NORMALE';
-    const ub = b.urgence ?? b.metadata?.urgence ?? b.priority ?? 'NORMALE';
+    const ua = a.urgence ?? a.metadata?.urgence
+      ?? a.priority ?? 'NORMALE';
+    const ub = b.urgence ?? b.metadata?.urgence
+      ?? b.priority ?? 'NORMALE';
     const pa = priority[ua] ?? 3;
     const pb = priority[ub] ?? 3;
     if (pa !== pb) return pa - pb;
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    return new Date(b.createdAt ?? b.date ?? 0).getTime()
+         - new Date(a.createdAt ?? a.date ?? 0).getTime();
   });
 }
 
-function getUrgence(notif: any): string {
-  return String(notif.urgence ?? notif.metadata?.urgence ?? notif.priority ?? 'NORMALE').toUpperCase();
-}
-
-function isUnread(notif: any): boolean {
-  return notif.lu === false || notif.read === false || (!notif.lu && !notif.read);
-}
-
-function playNotificationSound(urgence: string) {
+// Sons via Web Audio API
+function playSound(urgence: string) {
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const AudioCtx = window.AudioContext ||
+      (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -42,17 +40,17 @@ function playNotificationSound(urgence: string) {
       osc.frequency.value = 880;
       osc.type = 'square';
       gain.gain.setValueAtTime(0, ctx.currentTime);
-      [0, 0.3, 0.6].forEach((t) => {
+      [0, 0.3, 0.6].forEach(t => {
         gain.gain.setValueAtTime(0.7, ctx.currentTime + t);
         gain.gain.setValueAtTime(0, ctx.currentTime + t + 0.2);
       });
       osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.8);
+      osc.stop(ctx.currentTime + 0.85);
     } else if (urgence === 'URGENTE') {
       osc.frequency.value = 660;
       osc.type = 'sine';
       gain.gain.setValueAtTime(0, ctx.currentTime);
-      [0, 0.4].forEach((t) => {
+      [0, 0.4].forEach(t => {
         gain.gain.setValueAtTime(0.5, ctx.currentTime + t);
         gain.gain.setValueAtTime(0, ctx.currentTime + t + 0.25);
       });
@@ -62,225 +60,278 @@ function playNotificationSound(urgence: string) {
       osc.frequency.value = 440;
       osc.type = 'sine';
       gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      gain.gain.exponentialRampToValueAtTime(
+        0.001, ctx.currentTime + 0.5
+      );
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + 0.5);
     }
-  } catch (e) {
-    console.warn('Audio non disponible:', e);
-  }
-}
-
-function formatTime24h(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString('fr-FR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-}
-
-function getNotificationTitle(notif: any): string {
-  const typeExamen =
-    notif.metadata?.typeExamen ?? notif.typeExamen ?? notif.motif ?? notif.title ?? 'Notification';
-  const patientNom =
-    notif.metadata?.patientNom ??
-    notif.metadata?.patientName ??
-    notif.patientNom ??
-    '';
-  if (patientNom) return `${typeExamen} — ${patientNom}`;
-  return String(typeExamen);
-}
-
-function getNotificationSubtitle(notif: any): string {
-  const service =
-    notif.metadata?.serviceNom ?? notif.metadata?.serviceId ?? notif.sourceServiceName ?? '';
-  const time = notif.createdAt ? formatTime24h(notif.createdAt) : '';
-  if (service && time) return `${service} · ${time}`;
-  return service || time || '';
+    setTimeout(() => ctx.close(), 2000);
+  } catch {}
 }
 
 export default function NotificationBell() {
-  const router = useRouter();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const knownIds = useRef<Set<string>>(new Set());
-  const initialLoad = useRef(true);
+  const router = useRouter();
 
-  const unreadNotifications = notifications.filter(isUnread);
-  const unreadCount = unreadNotifications.length;
-  const hasStatUnread = unreadNotifications.some((n) => getUrgence(n) === 'STAT');
-  const hasUrgentUnread =
-    !hasStatUnread && unreadNotifications.some((n) => getUrgence(n) === 'URGENTE');
+  const fetchNotifications = useCallback(async () => {
+    const raw = await getNotificationsAnapath();
+    if (!Array.isArray(raw)) return;
 
-  useEffect(() => {
-    const fetchNotifs = async () => {
-      try {
-        const notifs = sortNotifications(await getNotificationsAnapath());
+    const sorted = sortNotifications(raw);
 
-        if (!initialLoad.current) {
-          const newIds = notifs
-            .filter((n) => !knownIds.current.has(String(n.id)) && isUnread(n))
-            .map((n) => String(n.id));
-
-          if (newIds.length > 0) {
-            const urgences = notifs
-              .filter((n) => newIds.includes(String(n.id)))
-              .map((n) => getUrgence(n));
-            const maxUrgence = urgences.includes('STAT')
-              ? 'STAT'
-              : urgences.includes('URGENTE')
-                ? 'URGENTE'
-                : 'NORMALE';
-            playNotificationSound(maxUrgence);
-            newIds.forEach((id) => knownIds.current.add(id));
-          }
-        } else {
-          notifs.forEach((n) => knownIds.current.add(String(n.id)));
-          initialLoad.current = false;
-        }
-
-        setNotifications(notifs);
-      } catch (e) {
-        console.error('Erreur chargement notifications:', e);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchNotifs();
-    const interval = setInterval(fetchNotifs, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleNotificationClick = async (notif: any) => {
-    try {
-      await markNotificationAsRead(String(notif.id));
-    } catch (e) {
-      console.error('Erreur marquage notification:', e);
-    }
-
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === notif.id ? { ...n, lu: true, read: true } : n)),
+    // Détecter nouvelles notifications non lues
+    const newNotifs = sorted.filter(n =>
+      !n.lu && !n.read && !n.lue &&
+      !knownIds.current.has(n.id ?? n._id)
     );
 
-    const anapathId =
-      notif.metadata?.anapathId ?? notif.examId ?? notif.referenceId ?? notif.metadata?.requestId;
-    if (anapathId) router.push(`/worklist/${anapathId}`);
-    setIsOpen(false);
-  };
+    if (newNotifs.length > 0) {
+      // Urgence max parmi les nouvelles
+      const urgences = newNotifs.map(n =>
+        n.urgence ?? n.metadata?.urgence ?? 'NORMALE'
+      );
+      const maxUrgence = urgences.includes('STAT') ? 'STAT'
+        : urgences.includes('URGENTE') ? 'URGENTE' : 'NORMALE';
+      playSound(maxUrgence);
+      newNotifs.forEach(n =>
+        knownIds.current.add(n.id ?? n._id)
+      );
+    }
 
-  const markAllAsRead = async () => {
-    const unread = notifications.filter(isUnread);
-    try {
-      await Promise.all(unread.map((n) => markNotificationAsRead(String(n.id))));
-      setNotifications((prev) => prev.map((n) => ({ ...n, lu: true, read: true })));
-    } catch (e) {
-      console.error('Erreur marquage notifications:', e);
+    setNotifications(sorted);
+  }, []);
+
+  // Polling toutes les 30s avec cleanup
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
+  // Compter non-lues
+  const unreadCount = notifications.filter(n =>
+    !n.lu && !n.read && !n.lue
+  ).length;
+
+  // Urgence max pour couleur badge
+  const maxUrgence = notifications
+    .filter(n => !n.lu && !n.read && !n.lue)
+    .reduce((max, n) => {
+      const u = n.urgence ?? n.metadata?.urgence ?? 'NORMALE';
+      if (u === 'STAT') return 'STAT';
+      if (u === 'URGENTE' && max !== 'STAT') return 'URGENTE';
+      return max;
+    }, 'NORMALE');
+
+  const badgeColor = maxUrgence === 'STAT'
+    ? 'bg-red-600 animate-pulse'
+    : maxUrgence === 'URGENTE'
+    ? 'bg-orange-500'
+    : 'bg-blue-600';
+
+  const handleClick = async (notif: any) => {
+    // Marquer comme lu
+    const id = notif.id ?? notif._id;
+    if (id) {
+      await markNotificationAsRead(id);
+      setNotifications(prev =>
+        prev.map(n => (n.id ?? n._id) === id
+          ? { ...n, lu: true, read: true } : n
+        )
+      );
+    }
+
+    // Naviguer vers validation avec l'ID de l'examen
+    const anapathId = notif.metadata?.anapathId
+      ?? notif.referenceId
+      ?? notif.examId
+      ?? notif.metadata?.referenceId;
+
+    setIsOpen(false);
+
+    if (anapathId) {
+      router.push(`/validation?id=${anapathId}`);
+    } else {
+      router.push('/validation');
     }
   };
 
-  const displayCount = unreadCount > 99 ? '99+' : String(unreadCount);
-  const badgeClass = hasStatUnread
-    ? 'bg-red-600 animate-pulse'
-    : hasUrgentUnread
-      ? 'bg-orange-500'
-      : 'bg-blue-500';
-  const bellPulseClass = hasStatUnread ? 'animate-pulse' : '';
-
-  const getItemClass = (urgence: string) => {
-    if (urgence === 'STAT') return 'bg-red-50 border-l-4 border-red-600 p-3 cursor-pointer';
-    if (urgence === 'URGENTE') return 'bg-orange-50 border-l-4 border-orange-500 p-3 cursor-pointer';
-    return 'bg-white border-l-4 border-blue-400 p-3 cursor-pointer';
+  const handleMarkAllRead = async () => {
+    const unread = notifications.filter(n =>
+      !n.lu && !n.read && !n.lue
+    );
+    await Promise.all(
+      unread.map(n => markNotificationAsRead(n.id ?? n._id))
+    );
+    setNotifications(prev =>
+      prev.map(n => ({ ...n, lu: true, read: true }))
+    );
   };
 
-  const getTitleClass = (urgence: string) => {
-    if (urgence === 'STAT') return 'text-red-700 font-bold';
-    if (urgence === 'URGENTE') return 'text-orange-700 font-bold';
-    return 'text-gray-800 font-medium';
+  const getUrgenceFromNotif = (n: any): string =>
+    n.urgence ?? n.metadata?.urgence ?? 'NORMALE';
+
+  const formatTime = (dateStr: string): string => {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative">
+      {/* Bouton cloche */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`relative p-2 rounded-full hover:bg-slate-100 transition-colors text-slate-600 ${bellPulseClass}`}
-        aria-label="Notifications"
+        className={`relative p-2 rounded-full transition-colors
+          ${maxUrgence === 'STAT' && unreadCount > 0
+            ? 'animate-pulse' : ''
+          } hover:bg-gray-100`}
       >
-        <span className="material-symbols-outlined">notifications</span>
+        {/* Icône cloche SVG */}
+        <svg className="w-6 h-6 text-gray-600" fill="none"
+          stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round"
+            strokeWidth={2}
+            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118
+               14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0
+               10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0
+               .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3
+               0 11-6 0v-1m6 0H9" />
+        </svg>
+
+        {/* Badge nombre */}
         {unreadCount > 0 && (
-          <span
-            className={`absolute -top-1 -right-1 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ${badgeClass}`}
-          >
-            {displayCount}
+          <span className={`absolute -top-1 -right-1
+            ${badgeColor} text-white text-xs font-bold
+            rounded-full min-w-[20px] h-5 flex items-center
+            justify-center px-1`}>
+            {unreadCount > 15 ? '+15' : unreadCount}
           </span>
         )}
       </button>
 
+      {/* Dropdown notifications */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
-          <div className="flex justify-between items-center p-4 border-b border-gray-200 bg-gray-50">
-            <h3 className="font-bold text-gray-800">Notifications</h3>
+        <div className="absolute right-0 top-12 w-96
+          bg-white rounded-xl shadow-2xl border border-gray-100
+          z-50 overflow-hidden">
+
+          {/* En-tête dropdown */}
+          <div className="flex items-center justify-between
+            px-4 py-3 border-b border-gray-100 bg-gray-50">
+            <h3 className="font-semibold text-gray-800">
+              Notifications
+            </h3>
             {unreadCount > 0 && (
-              <button onClick={markAllAsRead} className="text-xs text-primary hover:underline">
+              <button
+                onClick={handleMarkAllRead}
+                className="text-xs text-blue-600
+                  hover:text-blue-800 font-medium"
+              >
                 Tout marquer comme lu
               </button>
             )}
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
-            {loading ? (
-              <div className="p-8 text-center text-gray-400">
-                <p className="text-sm">Chargement…</p>
-              </div>
-            ) : notifications.length === 0 ? (
-              <div className="p-8 text-center text-gray-400">
-                <span className="material-symbols-outlined text-4xl">notifications_none</span>
-                <p className="mt-2 text-sm">Aucune notification</p>
+          {/* Liste */}
+          <div className="max-h-[480px] overflow-y-auto">
+            {notifications.length === 0 ? (
+              <div className="flex flex-col items-center
+                justify-center py-12 text-gray-400">
+                <svg className="w-10 h-10 mb-2 opacity-40"
+                  fill="none" stroke="currentColor"
+                  viewBox="0 0 24 24">
+                  <path strokeLinecap="round"
+                    strokeLinejoin="round" strokeWidth={1.5}
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0
+                       0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2
+                       2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0
+                       .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0
+                       11-6 0v-1m6 0H9" />
+                </svg>
+                <p className="text-sm">Aucune notification</p>
               </div>
             ) : (
               notifications.map((notif) => {
-                const urgence = getUrgence(notif);
-                const unread = isUnread(notif);
-                const title = getNotificationTitle(notif);
-                const subtitle = getNotificationSubtitle(notif);
+                const urgence = getUrgenceFromNotif(notif);
+                const isUnread = !notif.lu && !notif.read && !notif.lue;
+                const id = notif.id ?? notif._id;
+
+                const bgClass = urgence === 'STAT'
+                  ? 'bg-red-50 hover:bg-red-100'
+                  : urgence === 'URGENTE'
+                  ? 'bg-orange-50 hover:bg-orange-100'
+                  : 'bg-white hover:bg-gray-50';
+
+                const borderClass = urgence === 'STAT'
+                  ? 'border-l-4 border-red-600'
+                  : urgence === 'URGENTE'
+                  ? 'border-l-4 border-orange-500'
+                  : 'border-l-4 border-blue-400';
+
+                const typeExamen = notif.metadata?.typeExamen
+                  ?? notif.typeExamen ?? 'Examen';
+                const patientId = notif.metadata?.patientId
+                  ?? notif.patientId ?? '';
+                const serviceNom = notif.metadata?.serviceNom
+                  ?? notif.metadata?.serviceId ?? '';
+                const time = formatTime(
+                  notif.createdAt ?? notif.date ?? ''
+                );
 
                 return (
                   <div
-                    key={notif.id}
-                    className={`${getItemClass(urgence)} transition-all hover:opacity-90 ${!unread ? 'opacity-60' : ''}`}
-                    onClick={() => handleNotificationClick(notif)}
+                    key={id}
+                    onClick={() => handleClick(notif)}
+                    className={`${bgClass} ${borderClass}
+                      px-4 py-3 cursor-pointer transition-colors
+                      border-b border-gray-100 last:border-b-0`}
                   >
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start
+                      justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        {urgence === 'STAT' && (
-                          <span className="animate-pulse bg-red-600 text-white text-xs px-2 py-0.5 rounded-full inline-block mb-1">
-                            🚨 STAT
+                        {/* Badge urgence */}
+                        {urgence !== 'NORMALE' && (
+                          <span className={`inline-block text-xs
+                            font-bold px-2 py-0.5 rounded-full
+                            mb-1 ${urgence === 'STAT'
+                              ? 'bg-red-600 text-white animate-pulse'
+                              : 'bg-orange-500 text-white'
+                            }`}>
+                            {urgence === 'STAT'
+                              ? '🚨 STAT' : '⚠️ URGENT'}
                           </span>
                         )}
-                        {urgence === 'URGENTE' && (
-                          <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full inline-block mb-1">
-                            ⚠️ URGENT
-                          </span>
-                        )}
-                        <p className={`text-sm ${getTitleClass(urgence)}`}>{title}</p>
-                        {subtitle && (
-                          <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
-                        )}
+
+                        {/* Titre */}
+                        <p className={`text-sm font-semibold
+                          truncate ${urgence === 'STAT'
+                            ? 'text-red-700'
+                            : urgence === 'URGENTE'
+                            ? 'text-orange-700'
+                            : 'text-gray-800'
+                          }`}>
+                          {typeExamen}
+                          {patientId && ` — ${patientId}`}
+                        </p>
+
+                        {/* Sous-titre */}
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {serviceNom && `${serviceNom} · `}
+                          {time}
+                        </p>
                       </div>
-                      {unread && (
-                        <div className="w-2 h-2 rounded-full mt-2 shrink-0 bg-red-500" />
+
+                      {/* Point non lu */}
+                      {isUnread && (
+                        <div className="w-2 h-2 bg-blue-600
+                          rounded-full mt-1 flex-shrink-0" />
                       )}
                     </div>
                   </div>

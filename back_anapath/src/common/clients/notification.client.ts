@@ -20,22 +20,24 @@ export class NotificationClient {
       '14a94274-db57-49e3-9375-1e642729b92b';
   }
 
-  async getNotificationsService(serviceId: string): Promise<any[]> {
+  async getNotificationsService(): Promise<any[]> {
     try {
-      const { data } = await axios.get(`${this.baseUrl}/notifications/service/${serviceId}`, {
-        timeout: this.timeout,
-      });
+      const { data } = await axios.get(
+        `${this.baseUrl}/notifications/service/${this.serviceId}`,
+        { timeout: this.timeout },
+      );
       return Array.isArray(data) ? data : [];
     } catch {
       return [];
     }
   }
 
-  async getUnreadNotifications(destinataire: string): Promise<any[]> {
+  async getUnreadNotifications(): Promise<any[]> {
     try {
-      const { data } = await axios.get(`${this.baseUrl}/notifications/non-lues/${destinataire}`, {
-        timeout: this.timeout,
-      });
+      const { data } = await axios.get(
+        `${this.baseUrl}/notifications/non-lues/${this.serviceId}`,
+        { timeout: this.timeout },
+      );
       return Array.isArray(data) ? data : [];
     } catch {
       return [];
@@ -49,17 +51,6 @@ export class NotificationClient {
       });
     } catch {
       // mode dégradé — ne pas bloquer
-    }
-  }
-
-  async getMesNotifications(): Promise<any[]> {
-    try {
-      const { data } = await axios.get(`${this.baseUrl}/notifications/mes-notifications`, {
-        timeout: this.timeout,
-      });
-      return Array.isArray(data) ? data : [];
-    } catch {
-      return [];
     }
   }
 

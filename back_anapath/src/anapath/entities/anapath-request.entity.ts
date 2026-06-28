@@ -59,6 +59,9 @@ export class AnapathRequest {
   extemporaneAlertSentAt: Date;
 
   @Column({ type: 'jsonb', nullable: true })
+  patientInfo: Record<string, unknown> | null;
+
+  @Column({ type: 'jsonb', nullable: true })
   prelevement: object;
 
   @Column({ type: 'jsonb', nullable: true })

@@ -9,12 +9,7 @@ import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
 import { formatDateLong } from '@/lib/dateFormat';
 import { getPatientForExamen } from '@/lib/api';
-import {
-  generateExamPDF,
-  buildExamPdfData,
-  DEFAULT_PERSONNEL,
-  getTypeLabel,
-} from '@/lib/generatePDF';
+import { generatePDF, getTypeLabel } from '@/lib/generatePDF';
 
 interface AnapathRequest {
   id: string;
@@ -288,20 +283,17 @@ function ValidationPageContent() {
     }
 
     try {
-      await generateExamPDF(
-        buildExamPdfData(selectedRequest, patient, {
-          validatedAt: null,
-          resultDetails: resultData.details,
-          resultConclusion: resultData.conclusion,
-          signature: signature.signature,
-          ordreProfessionnelNumber: signature.ordreProfessionnelNumber,
-          clinicalData: {
-            treatmentType: treatmentType || selectedRequest.prelevement?.clinicalData?.treatmentType,
-            suspicion: suspicion || selectedRequest.prelevement?.clinicalData?.suspicion,
-            clinicalNotes: clinicalNotes || selectedRequest.prelevement?.clinicalData?.clinicalNotes,
+      await generatePDF(
+        {
+          ...selectedRequest,
+          resultat: {
+            details: resultData.details,
+            conclusion: resultData.conclusion,
           },
-          personnel: DEFAULT_PERSONNEL,
-        }),
+          validatedBySignature: signature.signature,
+          validatedByUserId: signature.ordreProfessionnelNumber,
+        },
+        patient,
       );
     } catch {
       alert('Erreur lors de la génération du PDF.');
@@ -532,10 +524,9 @@ function ValidationPageContent() {
                 <div className="flex flex-wrap gap-3 items-center justify-center pt-6 pb-4 border-t border-outline-variant">
                   <button
                     onClick={exportPDF}
-                    className="flex items-center gap-2 px-5 h-10 rounded-full bg-primary text-white font-bold uppercase tracking-wider shadow-sm hover:opacity-90 transition-all"
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors font-medium"
                   >
-                    <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>
-                    Exporter PDF
+                    📄 Exporter PDF
                   </button>
                   <button
                     onClick={handleValidate}

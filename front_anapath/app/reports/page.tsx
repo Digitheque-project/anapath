@@ -16,7 +16,8 @@ import {
 } from '@/lib/weekUtils';
 import { statusLabels } from '@/lib/statusLabels';
 import { getServiceDisplayName } from '@/lib/serviceDisplay';
-import { generateReportPDF, getTypeLabel, type ReportPdfData } from '@/lib/generatePDF';
+import { generateReportPDF, type ReportPdfData } from '@/lib/reportPDF';
+import { getTypeLabel } from '@/lib/generatePDF';
 
 interface AnapathRequest {
   id: string;

@@ -46,4 +46,9 @@ export class CreateAnapathDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;
+
+  @ApiProperty({ required: false, description: 'Informations patient enrichies depuis Accueil' })
+  @IsOptional()
+  @IsObject()
+  patientInfo?: Record<string, unknown>;
 }

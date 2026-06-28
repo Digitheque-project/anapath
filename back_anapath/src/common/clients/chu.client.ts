@@ -12,7 +12,7 @@ export class ChuClient {
     this.baseUrl = (
       configService?.get<string>('CHU_SERVICE_URL') ??
       process.env.CHU_SERVICE_URL ??
-      ''
+      'https://service-chu-back-production-d6a8.up.railway.app'
     ).replace(/\/$/, '');
     this.anapathServiceId =
       configService?.get<string>('ANAPATH_SERVICE_ID') ??

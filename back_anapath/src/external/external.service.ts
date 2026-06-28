@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AnapathService } from '../anapath/anapath.service';
 import { CreatePrescriptionAnapathDto } from './dto/create-prescription-anapath.dto';
 import { ChuClient } from '../common/clients/chu.client';
+import { AccueilClient } from '../common/clients/accueil.client';
 import { ExamenType } from '../anapath/entities/anapath-request.entity';
 
 @Injectable()
@@ -9,6 +10,7 @@ export class ExternalService {
   constructor(
     private anapathService: AnapathService,
     private chuClient: ChuClient,
+    private accueilClient: AccueilClient,
   ) {}
 
   async createFromPrescription(
@@ -16,107 +18,72 @@ export class ExternalService {
     serviceIdHeader?: string,
   ) {
     const data = dto.data || {};
-    const requestingServiceId = serviceIdHeader || dto.serviceId;
-    const isExtemporane =
-      dto.urgence === 'STAT' ||
-      dto.typeExamen === 'EXTEMPORANE_STAT';
+    const { patientId, prescripteurId, urgence, alertes, typeExamen, chuId, serviceId } = dto;
+    const niveauUrgence = urgence ?? 'NORMALE';
 
-    const prelevement = this.mapToPrelevement(dto.typeExamen, data, dto.alertes);
+    const [patientResult, serviceResult, chuResult] = await Promise.allSettled([
+      chuId ? this.accueilClient.getPatient(patientId, chuId) : Promise.resolve(null),
+      serviceId ? this.chuClient.getService(serviceId) : Promise.resolve(null),
+      chuId ? this.chuClient.getChu(chuId) : Promise.resolve(null),
+    ]);
 
-    const metadata: Record<string, unknown> = {};
+    const patient = patientResult.status === 'fulfilled' ? patientResult.value : null;
+    const service = serviceResult.status === 'fulfilled' ? serviceResult.value : null;
+    const chu = chuResult.status === 'fulfilled' ? chuResult.value : null;
 
-    if (dto.serviceId || dto.chuId) {
-      const [serviceInfo, chuInfo] = await Promise.allSettled([
-        dto.serviceId ? this.chuClient.getService(dto.serviceId) : Promise.resolve(null),
-        dto.chuId ? this.chuClient.getChu(dto.chuId) : Promise.resolve(null),
-      ]);
+    const patientInfo = patient
+      ? {
+          nom: patient.nom,
+          prenom: patient.prenom,
+          nomComplet: `${patient.nom} ${patient.prenom}`,
+          sexe: patient.sexe,
+          dateNaissance: patient.dateNaissance,
+          age: this.accueilClient.calculateAge(patient.dateNaissance),
+          cin: patient.cin ?? null,
+          profession: patient.profession ?? null,
+          adresse: patient.adresse ?? null,
+          telephone: patient.telephone ?? null,
+          contactUrgence: patient.contactUrgence ?? null,
+          priseEnChargeId: patient.priseEnChargeId ?? null,
+        }
+      : null;
 
-      if (dto.serviceId) {
-        metadata.serviceNom =
-          serviceInfo.status === 'fulfilled' && serviceInfo.value?.name
-            ? serviceInfo.value.name
-            : 'Service inconnu';
-        metadata.serviceId = dto.serviceId;
-      }
+    const prelevement = {
+      site: data?.organe ?? data?.type_liquide ?? data?.etat_col ?? '',
+      description: data?.nature ?? data?.volume ?? data?.localisation ?? '',
+      clinicalData: {
+        alertes: alertes ?? null,
+        ...data,
+      },
+    };
 
-      if (dto.chuId) {
-        metadata.chuNom =
-          chuInfo.status === 'fulfilled' && chuInfo.value?.name
-            ? chuInfo.value.name
-            : 'CHU inconnu';
-        metadata.chuId = dto.chuId;
-      }
-    }
-
-    const niveauUrgence = dto.urgence ?? 'NORMALE';
-    metadata.urgence = niveauUrgence;
-    metadata.prescripteurId = dto.prescripteurId;
-    metadata.alertes = dto.alertes;
-    metadata.sourceServiceId = requestingServiceId;
+    const metadata: Record<string, unknown> = {
+      prescripteurId,
+      serviceId,
+      serviceNom: service?.name ?? 'Service inconnu',
+      chuId,
+      chuNom: chu?.name ?? 'CHU inconnu',
+      urgence: niveauUrgence,
+      sourceService: 'prescription',
+      sourceServiceId: serviceIdHeader || serviceId,
+      receivedAt: new Date().toISOString(),
+      alertes,
+    };
 
     const request = await this.anapathService.create({
-      patientId: dto.patientId,
-      episodeId: dto.serviceId,
-      typeExamen: dto.typeExamen as unknown as ExamenType,
-      isExtemporane,
+      patientId,
+      episodeId: serviceId,
+      typeExamen: typeExamen as unknown as ExamenType,
+      isExtemporane: typeExamen === 'EXTEMPORANE_STAT',
+      patientInfo: patientInfo ?? undefined,
       prelevement,
       metadata,
     });
 
+    console.log(
+      `✅ Examen créé : ${request.anapathId} | Patient: ${patient?.nom ?? patientId} | Type: ${typeExamen} | Urgence: ${niveauUrgence}`,
+    );
+
     return request;
-  }
-
-  private mapToPrelevement(
-    typeExamen: string,
-    data: Record<string, any>,
-    alertes?: string,
-  ): { site: string; description: string } {
-    let prelevement: { site: string; description: string };
-
-    switch (typeExamen) {
-      case 'BIOPSIE':
-      case 'POS':
-      case 'POC':
-        prelevement = {
-          site: data?.organe || 'Non spécifié',
-          description: `Organe: ${data?.organe || '-'}, Localisation: ${data?.localisation || '-'}, Nature: ${data?.nature || '-'}, Fixateur: ${data?.fixateur || '-'}`,
-        };
-        break;
-      case 'FCV_PAP':
-        prelevement = {
-          site: 'Col utérin',
-          description: `État du col: ${data?.etat_col || 'Non spécifié'}`,
-        };
-        break;
-      case 'LIQUIDE':
-        prelevement = {
-          site: data?.type_liquide || 'Liquide biologique',
-          description: `Volume: ${data?.volume || '-'}`,
-        };
-        break;
-      case 'CYT0PONCTION':
-        prelevement = {
-          site: data?.organe || 'Non spécifié',
-          description: `Cytoponction - Site: ${data?.organe || '-'}, Nature: ${data?.nature || '-'}`,
-        };
-        break;
-      case 'EXTEMPORANE_STAT':
-        prelevement = {
-          site: data?.organe || 'Non spécifié',
-          description: `Urgence chirurgicale: ${data?.urgence_chirurgicale || 'Oui'}`,
-        };
-        break;
-      default:
-        prelevement = {
-          site: data?.organe || 'Non spécifié',
-          description: JSON.stringify(data),
-        };
-    }
-
-    if (alertes) {
-      prelevement.description = `Alertes: ${alertes}. ${prelevement.description}`;
-    }
-
-    return prelevement;
   }
 }

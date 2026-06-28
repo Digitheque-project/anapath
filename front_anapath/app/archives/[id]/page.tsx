@@ -8,12 +8,7 @@ import PatientIdentitySection, { PatientInfo } from '@/components/PatientIdentit
 import axios from 'axios';
 import { formatDateLong, formatDateTime } from '@/lib/dateFormat';
 import { getPatientForExamen } from '@/lib/api';
-import {
-  generateExamPDF,
-  buildExamPdfData,
-  DEFAULT_PERSONNEL,
-  getTypeLabel,
-} from '@/lib/generatePDF';
+import { generatePDF, getTypeLabel } from '@/lib/generatePDF';
 import { statusLabels, statusColors } from '@/lib/statusLabels';
 
 interface AnapathRequest {
@@ -85,22 +80,8 @@ export default function ArchiveDetailPage() {
       return;
     }
 
-    const clinicalDataExport = request.prelevement?.clinicalData || {};
-
     try {
-      await generateExamPDF(
-        buildExamPdfData(request, patient, {
-          validatedAt: request.validatedAt,
-          clinicalData: clinicalDataExport,
-          resultDetails: request.resultat?.details || '',
-          resultConclusion: request.resultat?.conclusion || '',
-          validatedByUserId: request.validatedByUserId,
-          signedHash: request.signedHash,
-          signature: request.validatedByUserId || undefined,
-          ordreProfessionnelNumber: request.validatedByUserId || undefined,
-          personnel: DEFAULT_PERSONNEL,
-        }),
-      );
+      await generatePDF(request, patient);
     } catch {
       alert('Erreur lors de la génération du PDF.');
     }
@@ -238,10 +219,9 @@ export default function ArchiveDetailPage() {
           <div className="flex justify-center mt-8">
             <button
               onClick={exportPDF}
-              className="flex items-center gap-2 px-5 h-10 rounded-full bg-primary text-white font-bold uppercase tracking-wider shadow-sm hover:opacity-90 transition-all"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors font-medium"
             >
-              <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>
-              Exporter PDF
+              📄 Exporter PDF
             </button>
           </div>
         </div>

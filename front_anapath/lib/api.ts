@@ -54,9 +54,17 @@ export async function getAnapathServiceInfo(): Promise<any> {
   }
 }
 
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (typeof window !== 'undefined' ? '/api' : 'https://anapath-backend-ar7u.onrender.com/api');
+
 export async function getNotificationsAnapath(): Promise<any[]> {
   try {
-    const { data } = await api.get('/anapath/notifications');
+    const res = await fetch(`${API_BASE}/anapath/notifications`, {
+      cache: 'no-store',
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
     return Array.isArray(data) ? data : [];
   } catch {
     return [];
@@ -65,7 +73,12 @@ export async function getNotificationsAnapath(): Promise<any[]> {
 
 export async function getUnreadNotifications(): Promise<any[]> {
   try {
-    const { data } = await api.get('/anapath/notifications/non-lues');
+    const res = await fetch(
+      `${API_BASE}/anapath/notifications/non-lues`,
+      { cache: 'no-store' },
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
     return Array.isArray(data) ? data : [];
   } catch {
     return [];
@@ -74,8 +87,9 @@ export async function getUnreadNotifications(): Promise<any[]> {
 
 export async function markNotificationAsRead(id: string): Promise<void> {
   try {
-    await api.put(`/anapath/notifications/${id}/lire`);
-  } catch {
-    // mode dégradé
-  }
+    await fetch(`${API_BASE}/anapath/notifications/${id}/lire`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch {}
 }

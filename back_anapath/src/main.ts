@@ -5,9 +5,7 @@ import { AppModule } from './app.module';
 import { Utf8Interceptor } from './common/interceptors/utf8.interceptor';
 import { Utf8Pipe } from './common/pipes/utf8.pipe';
 import { ChuClient } from './common/clients/chu.client';
-
-const ANAPATH_SERVICE_ID =
-  process.env.ANAPATH_SERVICE_ID ?? '14a94274-db57-49e3-9375-1e642729b92b';
+import { AccueilClient } from './common/clients/accueil.client';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -41,7 +39,6 @@ async function bootstrap() {
   
   app.setGlobalPrefix('api');
   
-  // --- Configuration Swagger ---
   const config = new DocumentBuilder()
     .setTitle('API Anapath')
     .setDescription('API pour la gestion des examens d\'anatomie pathologique')
@@ -58,12 +55,14 @@ async function bootstrap() {
   await app.listen(port);
 
   const chuClient = new ChuClient();
+  new AccueilClient();
+
   const serviceInfo = await chuClient.getAnapathServiceInfo();
-  if (serviceInfo) {
-    console.log(`✅ Service connecté : ${serviceInfo.name} (ID: ${ANAPATH_SERVICE_ID})`);
-  } else {
-    console.warn('⚠️ Service CHU indisponible au démarrage - mode dégradé');
-  }
+  console.log(
+    serviceInfo
+      ? `✅ CHU Service OK : ${serviceInfo.name}`
+      : `⚠️ CHU Service indisponible`,
+  );
 
   console.log(`🚀 Backend Anapath démarré sur http://localhost:${port}`);
   console.log(`📚 Documentation Swagger disponible sur http://localhost:${port}/api/docs`);
