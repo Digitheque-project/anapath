@@ -9,7 +9,7 @@ import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
 import { formatDateLong } from '@/lib/dateFormat';
 import { getPatientForExamen } from '@/lib/api';
-import { generatePDF, getTypeLabel } from '@/lib/generatePDF';
+import { getTypeLabel } from '@/lib/generatePDF';
 
 interface AnapathRequest {
   id: string;
@@ -105,11 +105,12 @@ function ValidationPageContent() {
   }, [searchQuery, requests, preselectedId]);
 
   const populateFields = (request: AnapathRequest) => {
-    if (request.resultat) {
-      setResultData({
-        details: request.resultat.details || '',
-        conclusion: request.resultat.conclusion || '',
-      });
+    const details =
+      request.resultat?.details ?? (request as any).resultatDetails ?? '';
+    const conclusion =
+      request.resultat?.conclusion ?? (request as any).resultatConclusion ?? '';
+    if (details || conclusion) {
+      setResultData({ details, conclusion });
     } else {
       setResultData({ details: '', conclusion: '' });
     }
@@ -184,8 +185,9 @@ function ValidationPageContent() {
     try {
       setUpdating(true);
       await axios.patch(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${selectedRequest.id}`, {
+        resultatDetails: resultData.details,
+        resultatConclusion: resultData.conclusion,
         statut: 'RESULTAT_DISPONIBLE',
-        resultat: { details: resultData.details, conclusion: resultData.conclusion },
         prelevement: prelevementData,
       });
       await fetchData();
@@ -227,7 +229,13 @@ function ValidationPageContent() {
 
     try {
       setUpdating(true);
-      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${selectedRequest.id}/validate`, signature);
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${selectedRequest.id}/validate`, {
+        signature: signature.signature,
+        ordreProfessionnelNumber: signature.ordreProfessionnelNumber,
+        numeroOrdre: signature.ordreProfessionnelNumber,
+        resultatDetails: resultData.details,
+        resultatConclusion: resultData.conclusion,
+      });
       alert('Demande validée avec succès !');
       await fetchData();
       if (filteredRequests.length > 1) {
@@ -283,9 +291,12 @@ function ValidationPageContent() {
     }
 
     try {
+      const { generatePDF } = await import('@/lib/generatePDF');
       await generatePDF(
         {
           ...selectedRequest,
+          resultatDetails: resultData.details,
+          resultatConclusion: resultData.conclusion,
           resultat: {
             details: resultData.details,
             conclusion: resultData.conclusion,

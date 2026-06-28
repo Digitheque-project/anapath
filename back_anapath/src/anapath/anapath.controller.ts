@@ -108,7 +108,7 @@ export class AnapathController {
   @ApiParam({ name: 'id', description: 'UUID de la demande' })
   @Header('Content-Type', 'application/json; charset=utf-8')
   async getPatientForExamen(@Param('id') id: string) {
-    const examen = await this.service.findOne(id);
+    const examen = await this.service.findOneEntity(id);
     if (!examen) throw new NotFoundException();
 
     if (examen.patientInfo) return examen.patientInfo;

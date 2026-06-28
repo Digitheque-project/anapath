@@ -8,7 +8,7 @@ import PatientIdentitySection, { PatientInfo } from '@/components/PatientIdentit
 import axios from 'axios';
 import { formatDateLong, formatDateTime } from '@/lib/dateFormat';
 import { getPatientForExamen } from '@/lib/api';
-import { generatePDF, getTypeLabel } from '@/lib/generatePDF';
+import { getTypeLabel } from '@/lib/generatePDF';
 import { statusLabels, statusColors } from '@/lib/statusLabels';
 
 interface AnapathRequest {
@@ -31,8 +31,12 @@ interface AnapathRequest {
     conclusion: string;
     details: string;
   } | null;
+  resultatDetails?: string | null;
+  resultatConclusion?: string | null;
+  validatedBySignature?: string | null;
   validatedByUserId: string | null;
   validatedAt: string | null;
+  validationHash?: string | null;
   signedHash: string | null;
   createdAt: string;
   episodeId?: string | null;
@@ -81,6 +85,7 @@ export default function ArchiveDetailPage() {
     }
 
     try {
+      const { generatePDF } = await import('@/lib/generatePDF');
       await generatePDF(request, patient);
     } catch {
       alert('Erreur lors de la génération du PDF.');
@@ -194,16 +199,17 @@ export default function ArchiveDetailPage() {
           <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-6">
             <h4 className="font-bold text-primary mb-3">🔬 Compte-rendu d'analyse</h4>
             <div className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase">Description microscopique</label>
-                <div className="w-full mt-1 p-3 bg-[#f2f3fb] border border-outline-variant/30 rounded-lg text-sm whitespace-pre-wrap">
-                  {request.resultat?.details || 'Non renseigné'}
-                </div>
+              <div className="w-full p-3 bg-[#f2f3fb] border border-outline-variant/30 rounded-lg text-sm whitespace-pre-wrap">
+                {request?.resultat?.details
+                  ?? request?.resultatDetails
+                  ?? '—'}
               </div>
               <div>
                 <label className="text-xs font-bold text-tertiary uppercase">Conclusion diagnostique</label>
                 <div className="w-full mt-1 p-3 bg-tertiary/5 border border-tertiary/20 rounded-lg text-sm font-semibold whitespace-pre-wrap">
-                  {request.resultat?.conclusion || 'Non renseignée'}
+                  {request?.resultat?.conclusion
+                    ?? request?.resultatConclusion
+                    ?? '—'}
                 </div>
               </div>
             </div>
@@ -211,9 +217,13 @@ export default function ArchiveDetailPage() {
 
           <div className="bg-green-50 p-6 rounded-xl border border-green-200 mb-6">
             <h4 className="font-bold text-green-700 mb-3">✅ Demande validée</h4>
-            <p className="text-sm">Validée par: {request.validatedByUserId}</p>
-            <p className="text-sm">Le: {request.validatedAt ? formatDateTime(request.validatedAt) : '-'}</p>
-            <p className="text-xs text-slate-500 mt-2">Hash: {request.signedHash?.substring(0, 20)}...</p>
+            <p className="text-sm">
+              Validée par: {request.validatedBySignature ?? request.validatedByUserId ?? '—'}
+            </p>
+            <p className="text-sm">Le: {request.validatedAt ? formatDateTime(request.validatedAt) : '—'}</p>
+            <p className="text-xs text-slate-500 mt-2 break-all">
+              Hash: {(request.validationHash ?? request.signedHash) ?? '—'}
+            </p>
           </div>
 
           <div className="flex justify-center mt-8">

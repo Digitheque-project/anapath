@@ -39,6 +39,22 @@ export class UpdateAnapathDto {
   resultat?: ResultatDto;
 
   @IsOptional()
+  @IsString()
+  resultatDetails?: string;
+
+  @IsOptional()
+  @IsString()
+  resultatConclusion?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  conclusion?: string;
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => PrelevementDto)
   prelevement?: PrelevementDto;

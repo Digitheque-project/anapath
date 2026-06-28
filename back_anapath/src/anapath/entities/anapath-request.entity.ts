@@ -70,14 +70,26 @@ export class AnapathRequest {
   @Column({ type: 'jsonb', nullable: true })
   resultat: object;
 
+  @Column({ type: 'text', nullable: true })
+  resultatDetails: string;
+
+  @Column({ type: 'text', nullable: true })
+  resultatConclusion: string;
+
   @Column({ type: 'enum', enum: Statut, default: Statut.CREEE })
   statut: Statut;
+
+  @Column({ nullable: true })
+  validatedBySignature: string;
 
   @Column({ nullable: true })
   validatedByUserId: string;
 
   @Column({ type: 'timestamp', nullable: true })
   validatedAt: Date;
+
+  @Column({ nullable: true })
+  validationHash: string;
 
   @Column({ nullable: true })
   signedHash: string;

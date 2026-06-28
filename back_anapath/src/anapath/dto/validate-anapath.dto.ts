@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ValidateAnapathDto {
@@ -11,4 +11,24 @@ export class ValidateAnapathDto {
   @IsString()
   @IsNotEmpty()
   ordreProfessionnelNumber: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  numeroOrdre?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  resultatDetails?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  resultatConclusion?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  hash?: string;
 }
