@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
+import PatientIdentitySection, { PatientInfo } from '@/components/PatientIdentitySection';
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
-import { formatDateLong, formatDateTime } from '@/lib/dateFormat';
-import { getServiceDisplayName, getChuDisplayName } from '@/lib/serviceDisplay';
+import { formatDateLong } from '@/lib/dateFormat';
+import { getPatientForExamen } from '@/lib/api';
 import {
   generateExamPDF,
+  buildExamPdfData,
   DEFAULT_PERSONNEL,
   getTypeLabel,
 } from '@/lib/generatePDF';
@@ -34,10 +36,10 @@ interface AnapathRequest {
   isExtemporane?: boolean;
   episodeId?: string | null;
   metadata?: Record<string, unknown> | null;
+  patientInfo?: PatientInfo | null;
 }
 
-export default function ValidationPage() {
-  const router = useRouter();
+function ValidationPageContent() {
   const searchParams = useSearchParams();
   const preselectedId = searchParams.get('id');
 
@@ -45,6 +47,8 @@ export default function ValidationPage() {
   const [requests, setRequests] = useState<AnapathRequest[]>([]);
   const [filteredRequests, setFilteredRequests] = useState<AnapathRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<AnapathRequest | null>(null);
+  const [patient, setPatient] = useState<PatientInfo | null>(null);
+  const [patientLoading, setPatientLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
@@ -55,17 +59,23 @@ export default function ValidationPage() {
   const [suspicion, setSuspicion] = useState('');
   const [clinicalNotes, setClinicalNotes] = useState('');
 
-  const patientInfo = {
-    fullName: 'RANDRIANTOANDRO N.',
-    sex: 'Féminin',
-    age: 34,
-    sampleDate: selectedRequest ? formatDateLong(selectedRequest.createdAt) : '',
-    site: selectedRequest?.prelevement?.site || '',
-    requestingService: selectedRequest
-      ? getServiceDisplayName({ metadata: selectedRequest.metadata, episodeId: selectedRequest.episodeId })
-      : 'N/A',
-    chuName: selectedRequest ? getChuDisplayName(selectedRequest.metadata) : 'N/A',
-  };
+  useEffect(() => {
+    async function loadPatient() {
+      if (!selectedRequest) {
+        setPatient(null);
+        return;
+      }
+      setPatientLoading(true);
+      if (selectedRequest.patientInfo?.nomComplet) {
+        setPatient(selectedRequest.patientInfo);
+      } else {
+        const pat = await getPatientForExamen(selectedRequest.id);
+        setPatient(pat);
+      }
+      setPatientLoading(false);
+    }
+    loadPatient();
+  }, [selectedRequest?.id, selectedRequest?.patientInfo]);
 
   useEffect(() => {
     fetchData();
@@ -278,34 +288,21 @@ export default function ValidationPage() {
     }
 
     try {
-      await generateExamPDF({
-        anapathId: selectedRequest.anapathId,
-        patientId: selectedRequest.patientId,
-        typeExamen: selectedRequest.typeExamen,
-        typeExamenLabel: getTypeLabel(selectedRequest.typeExamen),
-        createdAt: selectedRequest.createdAt,
-        validatedAt: null,
-        patientFullName: patientInfo.fullName,
-        patientAge: patientInfo.age,
-        patientSex: patientInfo.sex,
-        sampleDate: patientInfo.sampleDate,
-        prelevementSite: selectedRequest.prelevement?.site,
-        prelevementDescription: selectedRequest.prelevement?.description,
-        requestingService: patientInfo.requestingService,
-        chuName: patientInfo.chuName,
-        prescriber: 'Non renseigné',
-        urgence: selectedRequest.isExtemporane ? 'STAT' : 'Normale',
-        clinicalData: {
-          treatmentType: treatmentType || selectedRequest.prelevement?.clinicalData?.treatmentType,
-          suspicion: suspicion || selectedRequest.prelevement?.clinicalData?.suspicion,
-          clinicalNotes: clinicalNotes || selectedRequest.prelevement?.clinicalData?.clinicalNotes,
-        },
-        resultDetails: resultData.details,
-        resultConclusion: resultData.conclusion,
-        signature: signature.signature,
-        ordreProfessionnelNumber: signature.ordreProfessionnelNumber,
-        personnel: DEFAULT_PERSONNEL,
-      });
+      await generateExamPDF(
+        buildExamPdfData(selectedRequest, patient, {
+          validatedAt: null,
+          resultDetails: resultData.details,
+          resultConclusion: resultData.conclusion,
+          signature: signature.signature,
+          ordreProfessionnelNumber: signature.ordreProfessionnelNumber,
+          clinicalData: {
+            treatmentType: treatmentType || selectedRequest.prelevement?.clinicalData?.treatmentType,
+            suspicion: suspicion || selectedRequest.prelevement?.clinicalData?.suspicion,
+            clinicalNotes: clinicalNotes || selectedRequest.prelevement?.clinicalData?.clinicalNotes,
+          },
+          personnel: DEFAULT_PERSONNEL,
+        }),
+      );
     } catch {
       alert('Erreur lors de la génération du PDF.');
     }
@@ -374,34 +371,25 @@ export default function ValidationPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-4">
                     <section className="bg-white border border-outline-variant rounded-xl shadow-sm overflow-hidden">
-                      <div className="p-4 flex items-center bg-surface-container-low border-b border-outline-variant">
-                        <span className="material-symbols-outlined text-primary mr-2">person</span>
-                        <h3 className="text-lg font-bold text-on-surface">Identité Patient</h3>
-                      </div>
-                      <div className="p-4 grid grid-cols-2 gap-y-3 gap-x-2">
-                        <div>
-                          <p className="text-xs text-on-surface-variant">Nom complet</p>
-                          <p className="font-bold text-on-surface">{patientInfo.fullName}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-on-surface-variant">Patient ID</p>
-                          <p className="font-medium text-on-surface">{selectedRequest.patientId}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-on-surface-variant">Âge / Sexe</p>
-                          <p className="font-medium text-on-surface">{patientInfo.age} ans / {patientInfo.sex}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-on-surface-variant">Type d'examen</p>
-                          <p className="font-medium text-on-surface">{getTypeLabel(selectedRequest.typeExamen)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-on-surface-variant">Date Prélèvement</p>
-                          <p className="font-medium text-on-surface">{patientInfo.sampleDate}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-on-surface-variant">Site de prélèvement</p>
-                          <p className="font-medium text-on-surface">{selectedRequest.prelevement?.site || '-'}</p>
+                      <div className="p-4 bg-surface-container-low border-b border-outline-variant">
+                        <PatientIdentitySection
+                          examen={selectedRequest}
+                          patient={patient}
+                          loading={patientLoading}
+                        />
+                        <div className="grid grid-cols-2 gap-y-3 gap-x-2 mt-4 pt-4 border-t border-outline-variant">
+                          <div>
+                            <p className="text-xs text-on-surface-variant">Type d'examen</p>
+                            <p className="font-medium text-on-surface">{getTypeLabel(selectedRequest.typeExamen)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-on-surface-variant">Date Prélèvement</p>
+                            <p className="font-medium text-on-surface">{formatDateLong(selectedRequest.createdAt)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-on-surface-variant">Site de prélèvement</p>
+                            <p className="font-medium text-on-surface">{selectedRequest.prelevement?.site || '-'}</p>
+                          </div>
                         </div>
                       </div>
                     </section>
@@ -411,11 +399,14 @@ export default function ValidationPage() {
                         <span className="material-symbols-outlined text-secondary">stethoscope</span>
                         <div>
                           <p className="text-xs text-on-surface-variant">Service demandeur</p>
-                          <p className="font-medium text-on-surface">{patientInfo.requestingService}</p>
+                          <p className="font-medium text-on-surface">{(selectedRequest.metadata?.serviceNom as string) ?? '—'}</p>
                         </div>
+                      </div>
+                      <div className="flex items-start gap-2 mt-3">
+                        <span className="material-symbols-outlined text-secondary">local_hospital</span>
                         <div>
                           <p className="text-xs text-on-surface-variant">CHU</p>
-                          <p className="font-medium text-on-surface">{patientInfo.chuName}</p>
+                          <p className="font-medium text-on-surface">{(selectedRequest.metadata?.chuNom as string) ?? '—'}</p>
                         </div>
                       </div>
                       <hr className="border-outline-variant my-3" />
@@ -567,5 +558,22 @@ export default function ValidationPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ValidationPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen bg-[#f9f9ff]">
+          <Sidebar />
+          <main className="flex-1 ml-64 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+          </main>
+        </div>
+      }
+    >
+      <ValidationPageContent />
+    </Suspense>
   );
 }

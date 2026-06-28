@@ -78,6 +78,10 @@ export interface ExamPdfData {
   patientFullName: string;
   patientAge: number | string;
   patientSex: string;
+  patientDateNaissance?: string | null;
+  patientCin?: string | null;
+  patientTelephone?: string | null;
+  patientAdresse?: string | null;
   sampleDate: string;
   prelevementSite?: string;
   prelevementDescription?: string;
@@ -281,6 +285,10 @@ function buildExamReportHtml(data: ExamPdfData): string {
         <tr><td style="padding:3px 0;"><strong>ID Patient</strong></td><td>${escapeHtml(data.patientId)}</td></tr>
         <tr><td style="padding:3px 0;"><strong>Âge</strong></td><td>${escapeHtml(data.patientAge)}</td></tr>
         <tr><td style="padding:3px 0;"><strong>Sexe</strong></td><td>${escapeHtml(data.patientSex)}</td></tr>
+        <tr><td style="padding:3px 0;"><strong>Date de naissance</strong></td><td>${escapeHtml(data.patientDateNaissance ? formatDate(data.patientDateNaissance) : '—')}</td></tr>
+        <tr><td style="padding:3px 0;"><strong>CIN</strong></td><td>${escapeHtml(data.patientCin ?? '—')}</td></tr>
+        <tr><td style="padding:3px 0;"><strong>Téléphone</strong></td><td>${escapeHtml(data.patientTelephone ?? '—')}</td></tr>
+        <tr><td style="padding:3px 0;"><strong>Adresse</strong></td><td>${escapeHtml(data.patientAdresse ?? '—')}</td></tr>
       </table>
 
       ${sectionTitle('2. PRESCRIPTION')}
@@ -482,6 +490,48 @@ async function runHtml2Pdf(
   } finally {
     document.body.removeChild(container);
   }
+}
+
+export function buildExamPdfData(
+  examen: any,
+  patient: any,
+  extras: Partial<ExamPdfData> = {},
+): ExamPdfData {
+  const urgenceMeta = examen.metadata?.urgence ?? (examen.isExtemporane ? 'STAT' : 'NORMALE');
+  const urgenceLabel = urgenceMeta === 'NORMALE' ? 'Normale' : String(urgenceMeta);
+
+  return {
+    anapathId: examen.anapathId,
+    patientId: examen.patientId,
+    typeExamen: examen.typeExamen,
+    typeExamenLabel: getTypeLabel(examen.typeExamen),
+    createdAt: examen.createdAt,
+    patientFullName: patient?.nomComplet ?? examen.patientId,
+    patientAge: patient?.age ? `${patient.age} ans` : '—',
+    patientSex: patient?.sexe ?? '—',
+    patientDateNaissance: patient?.dateNaissance ?? null,
+    patientCin: patient?.cin ?? null,
+    patientTelephone: patient?.telephone ?? null,
+    patientAdresse: patient?.adresse ?? null,
+    sampleDate: formatDateLong(examen.createdAt),
+    prelevementSite: examen.prelevement?.site,
+    prelevementDescription: examen.prelevement?.description,
+    requestingService: examen.metadata?.serviceNom ?? '—',
+    chuName: examen.metadata?.chuNom ?? '—',
+    prescriber: 'Non renseigné',
+    urgence: urgenceLabel,
+    resultDetails: '',
+    resultConclusion: '',
+    ...extras,
+  };
+}
+
+export async function generatePDF(
+  examen: any,
+  patient: any,
+  extras?: Partial<ExamPdfData>,
+): Promise<void> {
+  return generateExamPDF(buildExamPdfData(examen, patient, extras));
 }
 
 export async function generateExamPDF(data: ExamPdfData): Promise<void> {

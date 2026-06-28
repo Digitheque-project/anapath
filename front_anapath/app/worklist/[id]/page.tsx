@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
+import PatientIdentitySection, { PatientInfo } from '@/components/PatientIdentitySection';
 import axios from 'axios';
 import { formatDateLong } from '@/lib/dateFormat';
-import { getServiceDisplayName, getChuDisplayName } from '@/lib/serviceDisplay';
+import { getPatientForExamen } from '@/lib/api';
 import { statusLabels, statusColors } from '@/lib/statusLabels';
 
 interface AnapathRequest {
@@ -23,6 +24,7 @@ interface AnapathRequest {
   createdAt: string;
   episodeId?: string | null;
   metadata?: Record<string, unknown> | null;
+  patientInfo?: PatientInfo | null;
 }
 
 function extractValue(description: string | undefined, key: string): string {
@@ -44,36 +46,35 @@ export default function WorklistDetailPage() {
   const id = params.id as string;
 
   const [request, setRequest] = useState<AnapathRequest | null>(null);
+  const [patient, setPatient] = useState<PatientInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [patientLoading, setPatientLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
-  const patientInfo = {
-    fullName: 'RANDRIANTOANDRO N.',
-    sex: 'Féminin',
-    age: 34,
-    sampleDate: request ? formatDateLong(request.createdAt) : '',
-    site: request?.prelevement?.site || '',
-    requestingService: request
-      ? getServiceDisplayName({ metadata: request.metadata, episodeId: request.episodeId })
-      : 'N/A',
-    chuName: request ? getChuDisplayName(request.metadata) : 'N/A',
-  };
-
   useEffect(() => {
-    fetchRequest();
-  }, [id]);
-
-  const fetchRequest = async () => {
-    try {
+    async function load() {
       setLoading(true);
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}`);
-      setRequest(response.data);
-    } catch (error) {
-      console.error('Erreur:', error);
-    } finally {
-      setLoading(false);
+      setPatientLoading(true);
+      try {
+        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}`);
+        const exam = response.data;
+        setRequest(exam);
+
+        if (exam?.patientInfo?.nomComplet) {
+          setPatient(exam.patientInfo);
+        } else {
+          const pat = await getPatientForExamen(id);
+          setPatient(pat);
+        }
+      } catch (error) {
+        console.error('Erreur:', error);
+      } finally {
+        setLoading(false);
+        setPatientLoading(false);
+      }
     }
-  };
+    load();
+  }, [id]);
 
   const handleTakeCharge = async () => {
     if (!request) return;
@@ -85,7 +86,8 @@ export default function WorklistDetailPage() {
         await axios.patch(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${request.id}`, {
           statut: 'EN_ATTENTE',
         });
-        await fetchRequest();
+        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}`);
+        setRequest(response.data);
       }
       // Rediriger vers la page validation avec l'ID de l'examen
       router.push(`/validation?id=${request.id}`);
@@ -153,25 +155,13 @@ export default function WorklistDetailPage() {
               <h4 className="text-lg font-bold text-primary">Détails de la prescription</h4>
             </div>
 
-            {/* Identité Patient */}
             <div className="bg-surface-container-low rounded-lg p-4 mb-5 border border-outline-variant/30">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="material-symbols-outlined text-primary text-sm">person</span>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Identité Patient</label>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-xs text-slate-400">Nom complet</p>
-                  <p className="font-bold text-on-surface">{patientInfo.fullName}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">Patient ID</p>
-                  <p className="font-medium text-on-surface">{request.patientId}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">Âge / Sexe</p>
-                  <p className="font-medium text-on-surface">{patientInfo.age} ans / {patientInfo.sex}</p>
-                </div>
+              <PatientIdentitySection
+                examen={request}
+                patient={patient}
+                loading={patientLoading}
+              />
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mt-4 pt-4 border-t border-outline-variant/30">
                 <div>
                   <p className="text-xs text-slate-400">Type d'examen</p>
                   <p className="font-medium text-on-surface">
@@ -185,16 +175,8 @@ export default function WorklistDetailPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400">Service demandeur</p>
-                  <p className="font-medium text-on-surface">{patientInfo.requestingService}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">CHU</p>
-                  <p className="font-medium text-on-surface">{patientInfo.chuName}</p>
-                </div>
-                <div>
                   <p className="text-xs text-slate-400">Date Prélèvement</p>
-                  <p className="font-medium text-on-surface">{patientInfo.sampleDate}</p>
+                  <p className="font-medium text-on-surface">{formatDateLong(request.createdAt)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">Site de prélèvement</p>

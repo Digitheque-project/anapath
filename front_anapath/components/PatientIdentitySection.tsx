@@ -1,0 +1,96 @@
+'use client';
+
+export interface PatientInfo {
+  nomComplet?: string;
+  nom?: string;
+  prenom?: string;
+  age?: number | null;
+  sexe?: string | null;
+  dateNaissance?: string | null;
+  telephone?: string | null;
+  adresse?: string | null;
+  cin?: string | null;
+  profession?: string | null;
+  contactUrgence?: string | null;
+}
+
+interface PatientIdentitySectionProps {
+  examen: {
+    patientId: string;
+    metadata?: Record<string, unknown> | null;
+  } | null;
+  patient: PatientInfo | null;
+  loading?: boolean;
+  title?: string;
+  className?: string;
+}
+
+function SkeletonField() {
+  return <div className="h-4 bg-slate-200 rounded animate-pulse w-3/4" />;
+}
+
+function Field({
+  label,
+  value,
+  loading,
+  bold,
+}: {
+  label: string;
+  value: React.ReactNode;
+  loading?: boolean;
+  bold?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-xs text-slate-400">{label}</p>
+      {loading ? (
+        <SkeletonField />
+      ) : (
+        <p className={bold ? 'font-bold text-on-surface' : 'font-medium text-on-surface'}>{value}</p>
+      )}
+    </div>
+  );
+}
+
+export default function PatientIdentitySection({
+  examen,
+  patient,
+  loading = false,
+  title = 'Identité Patient',
+  className = '',
+}: PatientIdentitySectionProps) {
+  const nomComplet = patient?.nomComplet ?? examen?.patientId ?? '—';
+  const age = patient?.age ?? '—';
+  const sexe = patient?.sexe ?? '—';
+  const dateNaissance = patient?.dateNaissance
+    ? new Date(patient.dateNaissance).toLocaleDateString('fr-FR')
+    : '—';
+  const serviceNom = (examen?.metadata?.serviceNom as string) ?? '—';
+  const chuNom = (examen?.metadata?.chuNom as string) ?? '—';
+
+  return (
+    <div className={className}>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="material-symbols-outlined text-primary text-sm">person</span>
+        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{title}</label>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+        <Field label="Nom complet" value={nomComplet} loading={loading} bold />
+        <Field label="Patient ID" value={examen?.patientId ?? '—'} loading={loading && !examen} />
+        <Field
+          label="Âge / Sexe"
+          value={`${age}${typeof age === 'number' ? ' ans' : ''} / ${sexe}`}
+          loading={loading}
+        />
+        <Field label="Date de naissance" value={dateNaissance} loading={loading} />
+        <Field label="Téléphone" value={patient?.telephone ?? '—'} loading={loading} />
+        <Field label="Adresse" value={patient?.adresse ?? '—'} loading={loading} />
+        <Field label="CIN" value={patient?.cin ?? '—'} loading={loading} />
+        <Field label="Profession" value={patient?.profession ?? '—'} loading={loading} />
+        <Field label="Contact d'urgence" value={patient?.contactUrgence ?? '—'} loading={loading} />
+        <Field label="Service demandeur" value={serviceNom} loading={loading && !examen} />
+        <Field label="CHU" value={chuNom} loading={loading && !examen} />
+      </div>
+    </div>
+  );
+}

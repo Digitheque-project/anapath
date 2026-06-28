@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
+import PatientIdentitySection, { PatientInfo } from '@/components/PatientIdentitySection';
 import axios from 'axios';
-import { formatDateLong, formatDateTime, formatDate } from '@/lib/dateFormat';
-import { getServiceDisplayName, getChuDisplayName } from '@/lib/serviceDisplay';
+import { formatDateLong, formatDateTime } from '@/lib/dateFormat';
+import { getPatientForExamen } from '@/lib/api';
 import {
   generateExamPDF,
+  buildExamPdfData,
   DEFAULT_PERSONNEL,
   getTypeLabel,
 } from '@/lib/generatePDF';
@@ -40,43 +42,42 @@ interface AnapathRequest {
   createdAt: string;
   episodeId?: string | null;
   metadata?: Record<string, unknown> | null;
+  patientInfo?: PatientInfo | null;
 }
 
 export default function ArchiveDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params.id as string;
 
   const [request, setRequest] = useState<AnapathRequest | null>(null);
+  const [patient, setPatient] = useState<PatientInfo | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const patientInfo = {
-    fullName: 'RANDRIANTOANDRO N.',
-    sex: 'Féminin',
-    age: 34,
-    sampleDate: request ? formatDateLong(request.createdAt) : '',
-    site: request?.prelevement?.site || '',
-    requestingService: request
-      ? getServiceDisplayName({ metadata: request.metadata, episodeId: request.episodeId })
-      : 'N/A',
-    chuName: request ? getChuDisplayName(request.metadata) : 'N/A',
-  };
+  const [patientLoading, setPatientLoading] = useState(true);
 
   useEffect(() => {
-    fetchRequest();
-  }, [id]);
-
-  const fetchRequest = async () => {
-    try {
+    async function load() {
       setLoading(true);
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}`);
-      setRequest(response.data);
-    } catch (error) {
-      console.error('Erreur:', error);
-    } finally {
-      setLoading(false);
+      setPatientLoading(true);
+      try {
+        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}`);
+        const exam = response.data;
+        setRequest(exam);
+
+        if (exam?.patientInfo?.nomComplet) {
+          setPatient(exam.patientInfo);
+        } else {
+          const pat = await getPatientForExamen(id);
+          setPatient(pat);
+        }
+      } catch (error) {
+        console.error('Erreur:', error);
+      } finally {
+        setLoading(false);
+        setPatientLoading(false);
+      }
     }
-  };
+    load();
+  }, [id]);
 
   const exportPDF = async () => {
     if (!request) {
@@ -87,32 +88,19 @@ export default function ArchiveDetailPage() {
     const clinicalDataExport = request.prelevement?.clinicalData || {};
 
     try {
-      await generateExamPDF({
-        anapathId: request.anapathId,
-        patientId: request.patientId,
-        typeExamen: request.typeExamen,
-        typeExamenLabel: getTypeLabel(request.typeExamen),
-        createdAt: request.createdAt,
-        validatedAt: request.validatedAt,
-        patientFullName: patientInfo.fullName,
-        patientAge: patientInfo.age,
-        patientSex: patientInfo.sex,
-        sampleDate: patientInfo.sampleDate,
-        prelevementSite: request.prelevement?.site,
-        prelevementDescription: request.prelevement?.description,
-        requestingService: patientInfo.requestingService,
-        chuName: patientInfo.chuName,
-        prescriber: 'Non renseigné',
-        urgence: request.isExtemporane ? 'STAT' : 'Normale',
-        clinicalData: clinicalDataExport,
-        resultDetails: request.resultat?.details || '',
-        resultConclusion: request.resultat?.conclusion || '',
-        validatedByUserId: request.validatedByUserId,
-        signedHash: request.signedHash,
-        signature: request.validatedByUserId || undefined,
-        ordreProfessionnelNumber: request.validatedByUserId || undefined,
-        personnel: DEFAULT_PERSONNEL,
-      });
+      await generateExamPDF(
+        buildExamPdfData(request, patient, {
+          validatedAt: request.validatedAt,
+          clinicalData: clinicalDataExport,
+          resultDetails: request.resultat?.details || '',
+          resultConclusion: request.resultat?.conclusion || '',
+          validatedByUserId: request.validatedByUserId,
+          signedHash: request.signedHash,
+          signature: request.validatedByUserId || undefined,
+          ordreProfessionnelNumber: request.validatedByUserId || undefined,
+          personnel: DEFAULT_PERSONNEL,
+        }),
+      );
     } catch {
       alert('Erreur lors de la génération du PDF.');
     }
@@ -168,14 +156,25 @@ export default function ArchiveDetailPage() {
 
         <div className="flex-1 p-6 w-full max-w-5xl mx-auto">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-6">
-            <h4 className="font-bold text-primary mb-3">👤 Identité Patient</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-              <div><label className="text-xs text-slate-400">Nom complet</label><p className="font-bold">{patientInfo.fullName}</p></div>
-              <div><label className="text-xs text-slate-400">Patient ID</label><p className="font-medium">{request.patientId}</p></div>
-              <div><label className="text-xs text-slate-400">Âge / Sexe</label><p className="font-medium">{patientInfo.age} ans / {patientInfo.sex}</p></div>
-              <div><label className="text-xs text-slate-400">Type d'examen</label><p className="font-medium">{getTypeLabel(request.typeExamen)}</p></div>
-              <div><label className="text-xs text-slate-400">Date Prélèvement</label><p className="font-medium">{patientInfo.sampleDate}</p></div>
-              <div><label className="text-xs text-slate-400">Site de prélèvement</label><p className="font-medium">{request.prelevement?.site || '-'}</p></div>
+            <PatientIdentitySection
+              examen={request}
+              patient={patient}
+              loading={patientLoading}
+              title="👤 Identité Patient"
+            />
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mt-4 pt-4 border-t border-outline-variant/20">
+              <div>
+                <label className="text-xs text-slate-400">Type d'examen</label>
+                <p className="font-medium">{getTypeLabel(request.typeExamen)}</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400">Date Prélèvement</label>
+                <p className="font-medium">{formatDateLong(request.createdAt)}</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400">Site de prélèvement</label>
+                <p className="font-medium">{request.prelevement?.site || '-'}</p>
+              </div>
             </div>
           </div>
 
@@ -184,14 +183,14 @@ export default function ArchiveDetailPage() {
               <span className="material-symbols-outlined text-secondary">stethoscope</span>
               <div>
                 <p className="text-xs text-slate-400">Service demandeur</p>
-                <p className="font-medium">{patientInfo.requestingService}</p>
+                <p className="font-medium">{(request.metadata?.serviceNom as string) ?? '—'}</p>
               </div>
             </div>
             <div className="flex items-start gap-2 mt-3">
               <span className="material-symbols-outlined text-secondary">local_hospital</span>
               <div>
                 <p className="text-xs text-slate-400">CHU</p>
-                <p className="font-medium">{patientInfo.chuName}</p>
+                <p className="font-medium">{(request.metadata?.chuNom as string) ?? '—'}</p>
               </div>
             </div>
             <hr className="border-outline-variant my-3" />
