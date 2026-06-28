@@ -55,21 +55,17 @@ function ValidationPageContent() {
   const [clinicalNotes, setClinicalNotes] = useState('');
 
   useEffect(() => {
-    async function loadPatient() {
-      if (!selectedRequest) {
-        setPatient(null);
-        return;
-      }
-      setPatientLoading(true);
-      if (selectedRequest.patientInfo?.nomComplet) {
-        setPatient(selectedRequest.patientInfo);
-      } else {
-        const pat = await getPatientForExamen(selectedRequest.id);
-        setPatient(pat);
-      }
+    if (!selectedRequest?.id) return;
+    setPatientLoading(true);
+    if (selectedRequest.patientInfo?.nomComplet) {
+      setPatient(selectedRequest.patientInfo);
       setPatientLoading(false);
+      return;
     }
-    loadPatient();
+    getPatientForExamen(selectedRequest.id)
+      .then((p) => setPatient(p))
+      .catch(() => setPatient(null))
+      .finally(() => setPatientLoading(false));
   }, [selectedRequest?.id, selectedRequest?.patientInfo]);
 
   useEffect(() => {
@@ -229,12 +225,23 @@ function ValidationPageContent() {
 
     try {
       setUpdating(true);
-      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${selectedRequest.id}/validate`, {
-        signature: signature.signature,
-        ordreProfessionnelNumber: signature.ordreProfessionnelNumber,
-        numeroOrdre: signature.ordreProfessionnelNumber,
+      const numeroOrdre = signature.ordreProfessionnelNumber;
+      const hashInput = `${selectedRequest.anapathId}-${signature.signature}-${numeroOrdre}`;
+      const hashBuffer = await crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(hashInput),
+      );
+      const hash = Array.from(new Uint8Array(hashBuffer))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      await axios.patch(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${selectedRequest.id}`, {
         resultatDetails: resultData.details,
         resultatConclusion: resultData.conclusion,
+        signature: signature.signature,
+        numeroOrdre,
+        hash,
+        statut: 'VALIDE',
       });
       alert('Demande validée avec succès !');
       await fetchData();
@@ -284,7 +291,7 @@ function ValidationPageContent() {
   // ============================================================
   // EXPORT PDF
   // ============================================================
-  const exportPDF = async () => {
+  const handleExportPDF = async () => {
     if (!selectedRequest) {
       alert('Aucun examen sélectionné.');
       return;
@@ -306,8 +313,9 @@ function ValidationPageContent() {
         },
         patient,
       );
-    } catch {
-      alert('Erreur lors de la génération du PDF.');
+    } catch (e) {
+      console.error('Erreur PDF:', e);
+      alert('Erreur lors de la génération du PDF');
     }
   };
 
@@ -534,7 +542,7 @@ function ValidationPageContent() {
 
                 <div className="flex flex-wrap gap-3 items-center justify-center pt-6 pb-4 border-t border-outline-variant">
                   <button
-                    onClick={exportPDF}
+                    onClick={handleExportPDF}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors font-medium"
                   >
                     📄 Exporter PDF

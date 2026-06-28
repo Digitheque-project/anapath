@@ -30,7 +30,14 @@ export class AccueilClient {
         `${this.baseUrl}/accueil/patients/${patientId}`,
         { params: { chuId }, timeout: this.timeout },
       );
-      return data;
+      const age = data.dateNaissance
+        ? this.calculateAge(data.dateNaissance)
+        : null;
+      return {
+        ...data,
+        nomComplet: `${data.nom ?? ''} ${data.prenom ?? ''}`.trim(),
+        age,
+      };
     } catch {
       return null;
     }

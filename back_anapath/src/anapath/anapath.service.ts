@@ -123,6 +123,20 @@ export class AnapathService {
     if (updateDto.prelevement !== undefined) request.prelevement = updateDto.prelevement;
     if (updateDto.motifAnnulation !== undefined) request.motifAnnulation = updateDto.motifAnnulation;
 
+    if (updateDto.signature !== undefined) {
+      request.validatedBySignature = updateDto.signature;
+    }
+    if (updateDto.numeroOrdre !== undefined) {
+      request.validatedByUserId = updateDto.numeroOrdre;
+    }
+    if (updateDto.hash !== undefined) {
+      request.validationHash = updateDto.hash;
+      request.signedHash = updateDto.hash;
+    }
+    if (updateDto.statut === Statut.VALIDE) {
+      request.validatedAt = new Date();
+    }
+
     this.syncResultatFields(request);
 
     const saved = await this.anapathRepository.save(request);

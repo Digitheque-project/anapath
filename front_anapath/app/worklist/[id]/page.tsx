@@ -52,29 +52,33 @@ export default function WorklistDetailPage() {
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
-    async function load() {
+    async function loadExamen() {
       setLoading(true);
-      setPatientLoading(true);
       try {
         const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}`);
-        const exam = response.data;
-        setRequest(exam);
-
-        if (exam?.patientInfo?.nomComplet) {
-          setPatient(exam.patientInfo);
-        } else {
-          const pat = await getPatientForExamen(id);
-          setPatient(pat);
-        }
+        setRequest(response.data);
       } catch (error) {
         console.error('Erreur:', error);
       } finally {
         setLoading(false);
-        setPatientLoading(false);
       }
     }
-    load();
+    loadExamen();
   }, [id]);
+
+  useEffect(() => {
+    if (!request?.id) return;
+    setPatientLoading(true);
+    if (request.patientInfo?.nomComplet) {
+      setPatient(request.patientInfo);
+      setPatientLoading(false);
+      return;
+    }
+    getPatientForExamen(request.id)
+      .then((p) => setPatient(p))
+      .catch(() => setPatient(null))
+      .finally(() => setPatientLoading(false));
+  }, [request?.id, request?.patientInfo]);
 
   const handleTakeCharge = async () => {
     if (!request) return;

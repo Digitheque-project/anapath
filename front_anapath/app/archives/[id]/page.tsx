@@ -54,31 +54,36 @@ export default function ArchiveDetailPage() {
   const [patientLoading, setPatientLoading] = useState(true);
 
   useEffect(() => {
-    async function load() {
+    async function loadExamen() {
       setLoading(true);
       setPatientLoading(true);
       try {
         const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}`);
-        const exam = response.data;
-        setRequest(exam);
-
-        if (exam?.patientInfo?.nomComplet) {
-          setPatient(exam.patientInfo);
-        } else {
-          const pat = await getPatientForExamen(id);
-          setPatient(pat);
-        }
+        setRequest(response.data);
       } catch (error) {
         console.error('Erreur:', error);
       } finally {
         setLoading(false);
-        setPatientLoading(false);
       }
     }
-    load();
+    loadExamen();
   }, [id]);
 
-  const exportPDF = async () => {
+  useEffect(() => {
+    if (!request?.id) return;
+    setPatientLoading(true);
+    if (request.patientInfo?.nomComplet) {
+      setPatient(request.patientInfo);
+      setPatientLoading(false);
+      return;
+    }
+    getPatientForExamen(request.id)
+      .then((p) => setPatient(p))
+      .catch(() => setPatient(null))
+      .finally(() => setPatientLoading(false));
+  }, [request?.id, request?.patientInfo]);
+
+  const handleExportPDF = async () => {
     if (!request) {
       alert('Aucune donnée à exporter.');
       return;
@@ -87,8 +92,9 @@ export default function ArchiveDetailPage() {
     try {
       const { generatePDF } = await import('@/lib/generatePDF');
       await generatePDF(request, patient);
-    } catch {
-      alert('Erreur lors de la génération du PDF.');
+    } catch (e) {
+      console.error('Erreur PDF:', e);
+      alert('Erreur lors de la génération du PDF');
     }
   };
 
@@ -228,7 +234,7 @@ export default function ArchiveDetailPage() {
 
           <div className="flex justify-center mt-8">
             <button
-              onClick={exportPDF}
+              onClick={handleExportPDF}
               className="flex items-center gap-2 px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors font-medium"
             >
               📄 Exporter PDF

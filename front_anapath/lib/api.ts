@@ -9,6 +9,10 @@ export const api = axios.create({
 
 export const ANAPATH_SERVICE_ID = '14a94274-db57-49e3-9375-1e642729b92b';
 
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (typeof window !== 'undefined' ? '/api' : 'https://anapath-backend-ar7u.onrender.com/api');
+
 export async function getExamen(id: string): Promise<any> {
   try {
     const { data } = await api.get(`/anapath/${id}`);
@@ -20,8 +24,11 @@ export async function getExamen(id: string): Promise<any> {
 
 export async function getPatientForExamen(examId: string): Promise<any> {
   try {
-    const { data } = await api.get(`/anapath/${examId}/patient`);
-    return data;
+    const res = await fetch(
+      `${API_BASE}/anapath/${examId}/patient`,
+      { cache: 'no-store' },
+    );
+    return res.ok ? res.json() : null;
   } catch {
     return null;
   }
@@ -53,10 +60,6 @@ export async function getAnapathServiceInfo(): Promise<any> {
     return null;
   }
 }
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (typeof window !== 'undefined' ? '/api' : 'https://anapath-backend-ar7u.onrender.com/api');
 
 export async function getNotificationsAnapath(): Promise<any[]> {
   try {

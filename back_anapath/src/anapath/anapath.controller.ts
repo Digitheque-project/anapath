@@ -26,6 +26,14 @@ export class AnapathController {
     private readonly accueilClient: AccueilClient,
   ) {}
 
+  @Get()
+  @ApiOperation({ summary: 'Lister toutes les demandes' })
+  @ApiResponse({ status: 200, description: 'Liste des demandes', type: [AnapathRequest] })
+  @Header('Content-Type', 'application/json; charset=utf-8')
+  findAll() {
+    return this.service.findAll();
+  }
+
   @Get('chu')
   @ApiOperation({ summary: 'Lister tous les CHU' })
   @Header('Content-Type', 'application/json; charset=utf-8')
@@ -52,13 +60,20 @@ export class AnapathController {
   @ApiOperation({ summary: 'Notifications du service Anapath' })
   @Header('Content-Type', 'application/json; charset=utf-8')
   async getNotifications() {
-    const url = `${process.env.NOTIF_SERVICE_URL ?? 'https://prescription-back-7m7a.onrender.com'}/notifications/service/${process.env.ANAPATH_SERVICE_ID ?? '14a94274-db57-49e3-9375-1e642729b92b'}`;
+    const base = process.env.NOTIF_SERVICE_URL
+      ?? 'https://prescription-back-7m7a.onrender.com';
+    const svcId = process.env.ANAPATH_SERVICE_ID
+      ?? '14a94274-db57-49e3-9375-1e642729b92b';
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      const res = await fetch(
+        `${base}/notifications/service/${svcId}`,
+        { signal: AbortSignal.timeout(5000) },
+      );
       if (!res.ok) return [];
       const data = await res.json();
       return sortNotifications(Array.isArray(data) ? data : []);
-    } catch {
+    } catch (e) {
+      console.warn('Notifications indisponibles:', e);
       return [];
     }
   }
@@ -67,13 +82,20 @@ export class AnapathController {
   @ApiOperation({ summary: 'Notifications non lues' })
   @Header('Content-Type', 'application/json; charset=utf-8')
   async getUnread() {
-    const url = `${process.env.NOTIF_SERVICE_URL ?? 'https://prescription-back-7m7a.onrender.com'}/notifications/non-lues/${process.env.ANAPATH_SERVICE_ID ?? '14a94274-db57-49e3-9375-1e642729b92b'}`;
+    const base = process.env.NOTIF_SERVICE_URL
+      ?? 'https://prescription-back-7m7a.onrender.com';
+    const svcId = process.env.ANAPATH_SERVICE_ID
+      ?? '14a94274-db57-49e3-9375-1e642729b92b';
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      const res = await fetch(
+        `${base}/notifications/non-lues/${svcId}`,
+        { signal: AbortSignal.timeout(5000) },
+      );
       if (!res.ok) return [];
       const data = await res.json();
       return sortNotifications(Array.isArray(data) ? data : []);
-    } catch {
+    } catch (e) {
+      console.warn('Non-lues indisponibles:', e);
       return [];
     }
   }
@@ -83,24 +105,17 @@ export class AnapathController {
   @ApiParam({ name: 'id', description: 'UUID de la notification' })
   @Header('Content-Type', 'application/json; charset=utf-8')
   async markAsRead(@Param('id') id: string) {
-    const url = `${process.env.NOTIF_SERVICE_URL ?? 'https://prescription-back-7m7a.onrender.com'}/notifications/${id}/lire`;
+    const base = process.env.NOTIF_SERVICE_URL
+      ?? 'https://prescription-back-7m7a.onrender.com';
     try {
-      const res = await fetch(url, {
-        method: 'PUT',
-        signal: AbortSignal.timeout(5000),
-      });
+      const res = await fetch(
+        `${base}/notifications/${id}/lire`,
+        { method: 'PUT', signal: AbortSignal.timeout(5000) },
+      );
       return res.ok ? res.json() : { success: false };
     } catch {
       return { success: false };
     }
-  }
-
-  @Get()
-  @ApiOperation({ summary: 'Lister toutes les demandes' })
-  @ApiResponse({ status: 200, description: 'Liste des demandes', type: [AnapathRequest] })
-  @Header('Content-Type', 'application/json; charset=utf-8')
-  findAll() {
-    return this.service.findAll();
   }
 
   @Get(':id/patient')
@@ -109,21 +124,24 @@ export class AnapathController {
   @Header('Content-Type', 'application/json; charset=utf-8')
   async getPatientForExamen(@Param('id') id: string) {
     const examen = await this.service.findOneEntity(id);
-    if (!examen) throw new NotFoundException();
+    if (!examen) throw new NotFoundException('Examen non trouvé');
 
-    if (examen.patientInfo) return examen.patientInfo;
+    if (examen.patientInfo?.nomComplet || (examen.patientInfo as any)?.nom) {
+      return examen.patientInfo;
+    }
 
     const patient = await this.accueilClient.getPatient(
       examen.patientId,
       (examen.metadata?.chuId as string) ?? '',
     );
-    return (
-      patient ?? {
-        nomComplet: examen.patientId,
-        age: null,
-        sexe: null,
-      }
-    );
+    if (patient) return patient;
+
+    return {
+      nomComplet: examen.patientId,
+      patientId: examen.patientId,
+      age: null,
+      sexe: null,
+    };
   }
 
   @Get(':id')

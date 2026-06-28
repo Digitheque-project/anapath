@@ -26,7 +26,7 @@ interface PatientIdentitySectionProps {
 }
 
 function SkeletonField() {
-  return <div className="h-4 bg-slate-200 rounded animate-pulse w-3/4" />;
+  return <div className="h-4 bg-gray-200 rounded animate-pulse w-32" />;
 }
 
 function Field({
@@ -60,8 +60,9 @@ export default function PatientIdentitySection({
   className = '',
 }: PatientIdentitySectionProps) {
   const nomComplet = patient?.nomComplet ?? examen?.patientId ?? '—';
-  const age = patient?.age ?? '—';
-  const sexe = patient?.sexe ?? '—';
+  const ageDisplay = patient?.age ? `${patient.age} ans` : '—';
+  const sexeDisplay = patient?.sexe === 'MALE' ? 'Masculin'
+    : patient?.sexe === 'FEMALE' ? 'Féminin' : '—';
   const dateNaissance = patient?.dateNaissance
     ? new Date(patient.dateNaissance).toLocaleDateString('fr-FR')
     : '—';
@@ -77,11 +78,8 @@ export default function PatientIdentitySection({
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
         <Field label="Nom complet" value={nomComplet} loading={loading} bold />
         <Field label="Patient ID" value={examen?.patientId ?? '—'} loading={loading && !examen} />
-        <Field
-          label="Âge / Sexe"
-          value={`${age}${typeof age === 'number' ? ' ans' : ''} / ${sexe}`}
-          loading={loading}
-        />
+        <Field label="Âge" value={ageDisplay} loading={loading} />
+        <Field label="Sexe" value={sexeDisplay} loading={loading} />
         <Field label="Date de naissance" value={dateNaissance} loading={loading} />
         <Field label="Téléphone" value={patient?.telephone ?? '—'} loading={loading} />
         <Field label="Adresse" value={patient?.adresse ?? '—'} loading={loading} />

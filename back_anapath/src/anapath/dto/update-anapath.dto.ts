@@ -62,4 +62,16 @@ export class UpdateAnapathDto {
   @IsOptional()
   @IsString()
   motifAnnulation?: string;
+
+  @IsOptional()
+  @IsString()
+  signature?: string;
+
+  @IsOptional()
+  @IsString()
+  numeroOrdre?: string;
+
+  @IsOptional()
+  @IsString()
+  hash?: string;
 }
