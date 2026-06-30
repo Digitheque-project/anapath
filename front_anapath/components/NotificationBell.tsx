@@ -1,138 +1,317 @@
 'use client';
-import { useState, useEffect, useRef, useCallback }
-  from 'react';
+import {
+  useState, useEffect, useRef, useCallback
+} from 'react';
 import { useRouter } from 'next/navigation';
 import {
   getNotificationsAnapath,
-  markNotificationAsRead
+  markNotificationAsRead,
+  marquerNotifLue,
 } from '@/lib/api';
 
 function sortNotifs(notifs: any[]): any[] {
-  const p: Record<string,number> =
-    { STAT:1, URGENTE:2, NORMALE:3 };
-  return [...notifs].sort((a,b) => {
-    const ua = a.urgence ?? a.metadata?.urgence ?? 'NORMALE';
-    const ub = b.urgence ?? b.metadata?.urgence ?? 'NORMALE';
-    const pa = p[ua] ?? 3, pb = p[ub] ?? 3;
+  const p: Record<string, number> =
+    { STAT: 1, URGENTE: 2, NORMALE: 3 };
+  return [...notifs].sort((a, b) => {
+    const getUrg = (n: any) =>
+      n.enriched?.urgence
+      ?? n.urgence
+      ?? n.metadata?.urgence
+      ?? 'NORMALE';
+    const pa = p[getUrg(a)] ?? 3;
+    const pb = p[getUrg(b)] ?? 3;
     if (pa !== pb) return pa - pb;
-    return new Date(b.createdAt ?? b.date ?? 0).getTime()
-         - new Date(a.createdAt ?? a.date ?? 0).getTime();
+    const da = new Date(
+      a.createdAt ?? a.date ?? 0).getTime();
+    const db = new Date(
+      b.createdAt ?? b.date ?? 0).getTime();
+    return db - da;
   });
 }
 
-function playSound(urgence: string) {
+function playSound(urgence: string, volume = 1.0) {
   try {
-    const Ctx = window.AudioContext ||
-      (window as any).webkitAudioContext;
+    const Ctx = window.AudioContext
+      || (window as any).webkitAudioContext;
     if (!Ctx) return;
     const ctx = new Ctx();
     const osc = ctx.createOscillator();
     const g = ctx.createGain();
-    osc.connect(g); g.connect(ctx.destination);
+    osc.connect(g);
+    g.connect(ctx.destination);
+
+    const vol = Math.min(volume, 1.0);
+
     if (urgence === 'STAT') {
-      osc.frequency.value = 880; osc.type = 'square';
+      osc.frequency.value = 880;
+      osc.type = 'square';
       g.gain.setValueAtTime(0, ctx.currentTime);
-      [0,0.3,0.6].forEach(t => {
-        g.gain.setValueAtTime(0.7, ctx.currentTime+t);
-        g.gain.setValueAtTime(0, ctx.currentTime+t+0.2);
+      [0, 0.3, 0.6].forEach(t => {
+        g.gain.setValueAtTime(vol, ctx.currentTime + t);
+        g.gain.setValueAtTime(
+          0, ctx.currentTime + t + 0.2);
       });
-      osc.start(); osc.stop(ctx.currentTime+0.85);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.85);
     } else if (urgence === 'URGENTE') {
-      osc.frequency.value = 660; osc.type = 'sine';
+      osc.frequency.value = 660;
+      osc.type = 'sine';
       g.gain.setValueAtTime(0, ctx.currentTime);
-      [0,0.4].forEach(t => {
-        g.gain.setValueAtTime(0.5, ctx.currentTime+t);
-        g.gain.setValueAtTime(0, ctx.currentTime+t+0.25);
+      [0, 0.4].forEach(t => {
+        g.gain.setValueAtTime(
+          vol * 0.7, ctx.currentTime + t);
+        g.gain.setValueAtTime(
+          0, ctx.currentTime + t + 0.25);
       });
-      osc.start(); osc.stop(ctx.currentTime+0.7);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.7);
     } else {
-      osc.frequency.value = 440; osc.type = 'sine';
-      g.gain.setValueAtTime(0.3, ctx.currentTime);
+      osc.frequency.value = 440;
+      osc.type = 'sine';
+      g.gain.setValueAtTime(vol * 0.4, ctx.currentTime);
       g.gain.exponentialRampToValueAtTime(
-        0.001, ctx.currentTime+0.5);
-      osc.start(); osc.stop(ctx.currentTime+0.5);
+        0.001, ctx.currentTime + 0.5);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
     }
     setTimeout(() => ctx.close(), 2000);
   } catch {}
+}
+
+function playAlerteExtemporane() {
+  try {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = 'none';
+    }
+
+    const Ctx = window.AudioContext
+      || (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const osc3 = ctx.createOscillator();
+    const g = ctx.createGain();
+    const compressor = ctx.createDynamicsCompressor();
+
+    compressor.threshold.value = -50;
+    compressor.knee.value = 40;
+    compressor.ratio.value = 12;
+    compressor.attack.value = 0;
+    compressor.release.value = 0.25;
+
+    osc1.connect(g);
+    osc2.connect(g);
+    osc3.connect(g);
+    g.connect(compressor);
+    compressor.connect(ctx.destination);
+
+    osc1.frequency.value = 1000;
+    osc2.frequency.value = 1250;
+    osc3.frequency.value = 800;
+    osc1.type = 'sawtooth';
+    osc2.type = 'square';
+    osc3.type = 'sawtooth';
+
+    g.gain.setValueAtTime(0, ctx.currentTime);
+
+    for (let i = 0; i < 5; i++) {
+      const t = ctx.currentTime + i * 0.4;
+      g.gain.setValueAtTime(1.0, t);
+      g.gain.setValueAtTime(0, t + 0.25);
+    }
+
+    osc1.start(); osc2.start(); osc3.start();
+    osc1.stop(ctx.currentTime + 2.0);
+    osc2.stop(ctx.currentTime + 2.0);
+    osc3.stop(ctx.currentTime + 2.0);
+
+    setTimeout(() => ctx.close(), 3000);
+  } catch {}
+}
+
+function isLue(n: any): boolean {
+  return n.enriched?.lu === true;
+}
+
+function getUrgence(n: any): string {
+  return n.enriched?.urgence
+    ?? n.urgence
+    ?? n.metadata?.urgence
+    ?? 'NORMALE';
+}
+
+function getTypeExamen(n: any): string {
+  const t = n.enriched?.typeExamen
+    ?? n.metadata?.typeExamen
+    ?? n.typeExamen ?? '';
+  const map: Record<string, string> = {
+    BIOPSIE:          'Biopsie',
+    FCV_PAP:          'FCV / Pap test',
+    CYT0PONCTION:     'Cytoponction',
+    LIQUIDE:          'Liquide',
+    POS:              'POS',
+    POC:              'POC',
+    EXTEMPORANE_STAT: '⚡ Extemporané STAT',
+  };
+  return map[t] ?? t;
+}
+
+function getServiceNom(n: any): string {
+  return n.enriched?.serviceNom
+    ?? n.metadata?.serviceNom
+    ?? n.metadata?.serviceId
+    ?? '—';
+}
+
+function getAnapathId(n: any): string {
+  return n.enriched?.anapathId
+    ?? n.metadata?.anapathId
+    ?? n.referenceId
+    ?? n.examId
+    ?? '';
+}
+
+function formatHeure(d: string): string {
+  if (!d) return '';
+  return new Date(d).toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function isRelance(n: any): boolean {
+  return n.metadata?.isRelance === true
+    || n.type === 'RAPPEL_VALIDATION';
 }
 
 export default function NotificationBell() {
   const [notifs, setNotifs] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const known = useRef<Set<string>>(new Set());
+  const extemporaneTimers =
+    useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const router = useRouter();
 
-  const fetch_ = useCallback(async () => {
-    const raw = await getNotificationsAnapath();
-    if (!Array.isArray(raw) || raw.length === 0) return;
-    const sorted = sortNotifs(raw);
-    const newOnes = sorted.filter(n =>
-      !n.lu && !n.read && !n.lue &&
-      !known.current.has(n.id ?? n._id)
-    );
-    if (newOnes.length > 0) {
-      const urg = newOnes.map(n =>
-        n.urgence ?? n.metadata?.urgence ?? 'NORMALE');
-      const max = urg.includes('STAT') ? 'STAT'
-        : urg.includes('URGENTE') ? 'URGENTE' : 'NORMALE';
-      playSound(max);
-      newOnes.forEach(n =>
-        known.current.add(n.id ?? n._id));
+  const cancelExtemporaneTimer = useCallback((aid: string) => {
+    const timer = extemporaneTimers.current.get(aid);
+    if (timer) {
+      clearTimeout(timer);
+      extemporaneTimers.current.delete(aid);
     }
-    setNotifs(sorted);
   }, []);
 
-  useEffect(() => {
-    fetch_();
-    const t = setInterval(fetch_, 30000);
-    return () => clearInterval(t);
-  }, [fetch_]);
+  const fetchNotifs = useCallback(async () => {
+    const raw = await getNotificationsAnapath();
+    if (!Array.isArray(raw)) return;
 
-  const unread = notifs.filter(
-    n => !n.lu && !n.read && !n.lue).length;
+    const sorted = sortNotifs(raw);
+
+    // Annuler timers si examen validé/archivé
+    sorted.forEach(n => {
+      const aid = getAnapathId(n);
+      const statut = n.enriched?.statut ?? '';
+      if (
+        aid &&
+        (statut === 'VALIDE' || statut === 'ARCHIVE')
+      ) {
+        cancelExtemporaneTimer(aid);
+      }
+    });
+
+    const newOnes = sorted.filter(n => {
+      const id = n.id ?? n._id;
+      return !isLue(n) && !known.current.has(id);
+    });
+
+    if (newOnes.length > 0) {
+      const urgences = newOnes.map(n => getUrgence(n));
+      const maxUrg = urgences.includes('STAT') ? 'STAT'
+        : urgences.includes('URGENTE') ? 'URGENTE'
+        : 'NORMALE';
+      playSound(maxUrg);
+
+      newOnes.forEach(n => {
+        const aid = getAnapathId(n);
+        const type = n.enriched?.typeExamen
+          ?? n.metadata?.typeExamen ?? '';
+        if (type === 'EXTEMPORANE_STAT' && aid
+            && !extemporaneTimers.current.has(aid)) {
+          const timer = setTimeout(() => {
+            playAlerteExtemporane();
+            setNotifs(prev => prev.map(x =>
+              getAnapathId(x) === aid
+                ? {
+                    ...x,
+                    _alerteExtemporane: true,
+                    _alerteAt: new Date().toISOString(),
+                  }
+                : x
+            ));
+            extemporaneTimers.current.delete(aid);
+          }, 25 * 60 * 1000);
+
+          extemporaneTimers.current.set(aid, timer);
+        }
+        known.current.add(n.id ?? n._id);
+      });
+    }
+
+    setNotifs(sorted);
+  }, [cancelExtemporaneTimer]);
+
+  useEffect(() => {
+    fetchNotifs();
+    const t = setInterval(fetchNotifs, 30000);
+    return () => {
+      clearInterval(t);
+      extemporaneTimers.current.forEach(
+        timer => clearTimeout(timer));
+    };
+  }, [fetchNotifs]);
+
+  const unreadCount = notifs.filter(n => !isLue(n)).length;
 
   const maxUrg = notifs
-    .filter(n => !n.lu && !n.read && !n.lue)
-    .reduce((m,n) => {
-      const u = n.urgence ?? n.metadata?.urgence ?? 'NORMALE';
-      return u==='STAT' ? 'STAT'
-        : u==='URGENTE' && m!=='STAT' ? 'URGENTE' : m;
+    .filter(n => !isLue(n))
+    .reduce((m, n) => {
+      const u = getUrgence(n);
+      return u === 'STAT' ? 'STAT'
+        : u === 'URGENTE' && m !== 'STAT' ? 'URGENTE' : m;
     }, 'NORMALE');
 
   const badgeCls = maxUrg === 'STAT'
     ? 'bg-red-600 animate-pulse'
     : maxUrg === 'URGENTE'
-    ? 'bg-orange-500' : 'bg-blue-600';
+    ? 'bg-orange-500'
+    : 'bg-blue-600';
 
   const handleClick = async (n: any) => {
-    const id = n.id ?? n._id;
-    if (id) {
-      await markNotificationAsRead(id);
-      setNotifs(prev => prev.map(x =>
-        (x.id??x._id)===id
-          ? {...x,lu:true,read:true} : x));
-    }
-    const aid = n.metadata?.anapathId
-      ?? n.referenceId ?? n.examId
-      ?? n.metadata?.referenceId;
+    const aid = getAnapathId(n);
     setOpen(false);
-    router.push(aid
-      ? `/validation?id=${aid}` : '/validation');
+    if (aid) {
+      router.push(`/validation?id=${aid}`);
+    } else {
+      router.push('/validation');
+    }
   };
 
   const markAll = async () => {
-    const unr = notifs.filter(
-      n => !n.lu && !n.read && !n.lue);
-    await Promise.all(unr.map(n =>
-      markNotificationAsRead(n.id ?? n._id)));
-    setNotifs(prev =>
-      prev.map(n => ({...n,lu:true,read:true})));
+    const eligibles = notifs.filter(n => {
+      const statut = n.enriched?.statut ?? '';
+      return ['RESULTAT_DISPONIBLE', 'VALIDE', 'ARCHIVE']
+        .includes(statut) && !isLue(n);
+    });
+    await Promise.all(eligibles.map(async n => {
+      const aid = getAnapathId(n);
+      const notifId = n.id ?? n._id;
+      if (aid) await marquerNotifLue(aid);
+      if (notifId) await markNotificationAsRead(notifId);
+    }));
+    await fetchNotifs();
   };
-
-  const fmt = (d: string) => d
-    ? new Date(d).toLocaleTimeString('fr-FR',
-        {hour:'2-digit',minute:'2-digit',hour12:false})
-    : '';
 
   return (
     <div className="relative">
@@ -150,131 +329,203 @@ export default function NotificationBell() {
                0118 14.158V11a6.002 6.002 0
                00-4-5.659V5a2 2 0 10-4
                0v.341C7.67 6.165 6 8.388 6
-               11v3.159c0 .538-.214
-               1.055-.595 1.436L4 17h5m6
-               0v1a3 3 0 11-6 0v-1m6 0H9"/>
+               11v3.159c0 .538-.214 1.055-.595
+               1.436L4 17h5m6 0v1a3 3 0
+               11-6 0v-1m6 0H9"/>
         </svg>
-        {unread > 0 && (
+
+        {unreadCount > 0 && (
           <span className={`absolute -top-1 -right-1
             ${badgeCls} text-white text-xs font-bold
             rounded-full min-w-[20px] h-5
-            flex items-center justify-center px-1`}>
-            {unread > 15 ? '+15' : unread}
+            flex items-center justify-center px-1
+            leading-none`}>
+            {unreadCount >= 15 ? '+15' : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 w-96
-          bg-white rounded-xl shadow-2xl
-          border border-gray-100 z-50 overflow-hidden">
-          <div className="flex items-center
-            justify-between px-4 py-3
-            border-b bg-gray-50">
-            <h3 className="font-semibold text-gray-800">
-              Notifications
-            </h3>
-            {unread > 0 && (
-              <button onClick={markAll}
-                className="text-xs text-blue-600
-                  hover:text-blue-800 font-medium">
-                Tout marquer comme lu
-              </button>
-            )}
-          </div>
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 top-12
+            w-[420px] bg-white rounded-xl shadow-2xl
+            border border-gray-100 z-50 overflow-hidden">
 
-          <div className="max-h-[480px] overflow-y-auto">
-            {notifs.length === 0 ? (
-              <div className="flex flex-col items-center
-                justify-center py-12 text-gray-400">
-                <svg className="w-10 h-10 mb-2 opacity-40"
-                  fill="none" stroke="currentColor"
-                  viewBox="0 0 24 24">
-                  <path strokeLinecap="round"
-                    strokeLinejoin="round" strokeWidth={1.5}
-                    d="M15 17h5l-1.405-1.405A2.032
-                       2.032 0 0118 14.158V11a6.002
-                       6.002 0 00-4-5.659V5a2 2 0
-                       10-4 0v.341C7.67 6.165 6
-                       8.388 6 11v3.159c0
-                       .538-.214 1.055-.595
-                       1.436L4 17h5m6 0v1a3 3 0
-                       11-6 0v-1m6 0H9"/>
-                </svg>
-                <p className="text-sm">
-                  Aucune notification
-                </p>
+            <div className="flex items-center
+              justify-between px-4 py-3
+              border-b bg-gray-50">
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-gray-800">
+                  Notifications
+                </h3>
+                {unreadCount > 0 && (
+                  <span className="bg-blue-100
+                    text-blue-700 text-xs font-bold
+                    px-2 py-0.5 rounded-full">
+                    {unreadCount} non lue
+                    {unreadCount > 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
-            ) : notifs.map(n => {
-              const urg = n.urgence
-                ?? n.metadata?.urgence ?? 'NORMALE';
-              const isUnread =
-                !n.lu && !n.read && !n.lue;
-              const id = n.id ?? n._id;
-              const bg = urg==='STAT'
-                ? 'bg-red-50 hover:bg-red-100'
-                : urg==='URGENTE'
-                ? 'bg-orange-50 hover:bg-orange-100'
-                : 'bg-white hover:bg-gray-50';
-              const border = urg==='STAT'
-                ? 'border-l-4 border-red-600'
-                : urg==='URGENTE'
-                ? 'border-l-4 border-orange-500'
-                : 'border-l-4 border-blue-400';
-              const type = n.metadata?.typeExamen
-                ?? n.typeExamen ?? 'Examen';
-              const pat = n.metadata?.patientId
-                ?? n.patientId ?? '';
-              const svc = n.metadata?.serviceNom
-                ?? n.metadata?.serviceId ?? '';
+              {unreadCount > 0 && (
+                <button
+                  onClick={markAll}
+                  className="text-xs text-blue-600
+                    hover:text-blue-800 font-medium">
+                  Tout marquer lu
+                </button>
+              )}
+            </div>
 
-              return (
-                <div key={id}
-                  onClick={() => handleClick(n)}
-                  className={`${bg} ${border}
-                    px-4 py-3 cursor-pointer
-                    transition-colors border-b
-                    border-gray-100 last:border-b-0`}>
-                  <div className="flex items-start
-                    justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      {urg !== 'NORMALE' && (
-                        <span className={`inline-block
-                          text-xs font-bold px-2 py-0.5
-                          rounded-full mb-1
-                          ${urg==='STAT'
-                            ? 'bg-red-600 text-white animate-pulse'
-                            : 'bg-orange-500 text-white'}`}>
-                          {urg==='STAT'
-                            ? '🚨 STAT' : '⚠️ URGENT'}
-                        </span>
-                      )}
-                      <p className={`text-sm font-semibold
-                        truncate
-                        ${urg==='STAT'
-                          ? 'text-red-700'
-                          : urg==='URGENTE'
-                          ? 'text-orange-700'
-                          : 'text-gray-800'}`}>
-                        {type}{pat && ` — ${pat}`}
-                      </p>
-                      <p className="text-xs
-                        text-gray-500 mt-0.5">
-                        {svc && `${svc} · `}
-                        {fmt(n.createdAt ?? n.date)}
-                      </p>
-                    </div>
-                    {isUnread && (
-                      <div className="w-2 h-2
-                        bg-blue-600 rounded-full
-                        mt-1 flex-shrink-0"/>
-                    )}
-                  </div>
+            <div className="max-h-[500px] overflow-y-auto">
+              {notifs.length === 0 ? (
+                <div className="flex flex-col
+                  items-center justify-center
+                  py-12 text-gray-400">
+                  <svg className="w-10 h-10 mb-2 opacity-40"
+                    fill="none" stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path strokeLinecap="round"
+                      strokeLinejoin="round" strokeWidth={1.5}
+                      d="M15 17h5l-1.405-1.405A2.032
+                         2.032 0 0118 14.158V11a6.002
+                         6.002 0 00-4-5.659V5a2 2 0
+                         10-4 0v.341C7.67 6.165 6 8.388
+                         6 11v3.159c0 .538-.214 1.055-.595
+                         1.436L4 17h5m6 0v1a3 3 0
+                         11-6 0v-1m6 0H9"/>
+                  </svg>
+                  <p className="text-sm">
+                    Aucune notification
+                  </p>
                 </div>
-              );
-            })}
+              ) : notifs.map(n => {
+                const urg  = getUrgence(n);
+                const lue  = isLue(n);
+                const rel  = isRelance(n);
+                const aid  = getAnapathId(n);
+                const id   = n.id ?? n._id;
+                const type = getTypeExamen(n);
+                const svc  = getServiceNom(n);
+                const heure = formatHeure(
+                  n.createdAt ?? n.date ?? '');
+                const alerte = n._alerteExtemporane;
+
+                const bg = lue
+                  ? 'bg-gray-50 opacity-70'
+                  : urg === 'STAT'
+                  ? 'bg-red-50 hover:bg-red-100'
+                  : urg === 'URGENTE'
+                  ? 'bg-orange-50 hover:bg-orange-100'
+                  : 'bg-white hover:bg-gray-50';
+
+                const border = lue
+                  ? 'border-l-4 border-gray-300'
+                  : urg === 'STAT'
+                  ? 'border-l-4 border-red-600'
+                  : urg === 'URGENTE'
+                  ? 'border-l-4 border-orange-500'
+                  : 'border-l-4 border-blue-400';
+
+                return (
+                  <div
+                    key={id ?? aid}
+                    onClick={() =>
+                      !lue && handleClick(n)}
+                    className={`
+                      ${bg} ${border}
+                      px-4 py-3
+                      ${!lue ? 'cursor-pointer' : 'cursor-default'}
+                      transition-colors
+                      border-b border-gray-100
+                      last:border-b-0
+                    `}
+                  >
+                    {alerte && (
+                      <div className="mb-2 px-2 py-1
+                        bg-red-700 text-white text-xs
+                        font-bold rounded animate-pulse">
+                        🚨 ALERTE 25 MIN — EXTEMPORANÉ
+                        EN COURS
+                      </div>
+                    )}
+
+                    {rel && (
+                      <div className="mb-1 text-xs
+                        text-amber-700 font-semibold
+                        bg-amber-50 border border-amber-200
+                        px-2 py-0.5 rounded inline-block">
+                        ⏰ Rappel — Validation en attente
+                      </div>
+                    )}
+
+                    <div className="flex items-start
+                      justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+
+                        {!lue && urg !== 'NORMALE' && (
+                          <span className={`
+                            inline-block text-xs
+                            font-bold px-2 py-0.5
+                            rounded-full mb-1
+                            ${urg === 'STAT'
+                              ? 'bg-red-600 text-white animate-pulse'
+                              : 'bg-orange-500 text-white'}
+                          `}>
+                            {urg === 'STAT'
+                              ? '🚨 STAT' : '⚠️ URGENT'}
+                          </span>
+                        )}
+
+                        <p className={`
+                          text-sm font-semibold
+                          ${lue
+                            ? 'text-gray-400'
+                            : urg === 'STAT'
+                            ? 'text-red-700'
+                            : urg === 'URGENTE'
+                            ? 'text-orange-700'
+                            : 'text-gray-800'}
+                        `}>
+                          {type}
+                        </p>
+
+                        <p className="text-xs
+                          text-gray-600 mt-0.5
+                          font-medium">
+                          📍 {svc}
+                        </p>
+
+                        <p className="text-xs
+                          text-gray-400 mt-0.5">
+                          🕐 Arrivée : {heure}
+                        </p>
+
+                        {lue && (
+                          <p className="text-xs
+                            text-green-600 mt-0.5
+                            font-medium">
+                            ✅ Résultat saisi
+                          </p>
+                        )}
+                      </div>
+
+                      {!lue && (
+                        <div className="w-2.5 h-2.5
+                          bg-blue-600 rounded-full
+                          mt-1 flex-shrink-0"/>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

@@ -11,6 +11,7 @@ import {
   formatWeekLabel,
   isDateInWeek,
   getDailyVolumeForWeek,
+  getWeekRange,
   toWeekInputValue,
   parseWeekInputValue,
 } from '@/lib/weekUtils';
@@ -18,6 +19,14 @@ import { statusLabels } from '@/lib/statusLabels';
 import { getServiceDisplayName } from '@/lib/serviceDisplay';
 import { generateReportPDF, type ReportPdfData } from '@/lib/reportPDF';
 import { getTypeLabel } from '@/lib/generatePDF';
+import {
+  BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip,
+  Legend, ResponsiveContainer,
+} from 'recharts';
+
+const COLORS = ['#00478d', '#2563eb', '#10b981',
+  '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
 interface AnapathRequest {
   id: string;
@@ -49,6 +58,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
   const [weekStart, setWeekStart] = useState(() => getMondayOfWeek(new Date()));
+  const [chartType, setChartType] = useState<'bar' | 'pie' | 'histogram'>('bar');
 
   useEffect(() => {
     fetchData();
@@ -156,6 +166,23 @@ export default function ReportsPage() {
   const weeklyDailyVolume = getDailyVolumeForWeek(weeklyRequests, weekStart);
   const weeklyMaxCount = Math.max(...weeklyDailyVolume.map((d) => d.count), 1);
 
+  const dataParType = Object.entries(stats.byType).map(([type, count]) => ({
+    type: getTypeLabel(type),
+    count,
+  }));
+
+  const dataParJour = weeklyDailyVolume.map((d) => ({
+    jour: d.day,
+    count: d.count,
+  }));
+
+  const chartBtn = (active: boolean) =>
+    `px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+      active
+        ? 'bg-[#00478d] text-white shadow-sm'
+        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+    }`;
+
   const mapToReportRow = (req: AnapathRequest) => ({
     anapathId: req.anapathId,
     patientId: req.patientId,
@@ -208,7 +235,28 @@ export default function ReportsPage() {
 
   const exportWeeklyPDF = async () => {
     try {
-      await generateReportPDF(buildReportPdfData(true));
+      const { start, end } = getWeekRange(weekStart);
+      const { generateWeeklyReportPDF } =
+        await import('@/lib/generateReportPDF');
+      await generateWeeklyReportPDF({
+        lundi: start.toLocaleDateString('fr-FR'),
+        dimanche: end.toLocaleDateString('fr-FR'),
+        kpis: {
+          total: weeklyRequests.length,
+          valides: weeklyValidated.length,
+          enAttente: weeklyPending.length,
+          delaiMoyen: `${weeklyAvgDelay.toFixed(1)} j`,
+        },
+        parJour: weeklyDailyVolume.map((d) => ({
+          jour: d.day,
+          count: d.count,
+        })),
+        examens: weeklyRequests.map((req) => ({
+          ...req,
+          statutLabel: statusLabels[req.statut] || req.statut,
+          prescriber: getServiceDisplayName({ episodeId: req.episodeId }),
+        })),
+      });
     } catch {
       alert('Erreur lors de la génération du rapport hebdomadaire PDF.');
     }
@@ -216,7 +264,7 @@ export default function ReportsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-[#f9f9ff]">
+      <div className="flex min-h-screen bg-transparent">
         <Sidebar />
         <main className="flex-1 ml-64 flex items-center justify-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -226,7 +274,7 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#f9f9ff] text-[#191c21]">
+    <div className="flex min-h-screen bg-transparent text-[#191c21]">
       <div className="fixed inset-0 grain-overlay z-[60] pointer-events-none"></div>
       <Sidebar />
       
@@ -277,7 +325,65 @@ export default function ReportsPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20">
-              <h3 className="font-bold mb-4">Répartition par type d'examen</h3>
+              <h3 className="font-bold mb-4">Répartition par type d&apos;examen</h3>
+
+              <div className="flex flex-wrap gap-2 mb-4">
+                <button onClick={() => setChartType('bar')} className={chartBtn(chartType === 'bar')}>
+                  📊 Diagramme en bâtons
+                </button>
+                <button onClick={() => setChartType('pie')} className={chartBtn(chartType === 'pie')}>
+                  🥧 Diagramme circulaire
+                </button>
+                <button onClick={() => setChartType('histogram')} className={chartBtn(chartType === 'histogram')}>
+                  📈 Histogramme
+                </button>
+              </div>
+
+              {chartType === 'bar' && dataParType.length > 0 && (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={dataParType}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="type" tick={{ fontSize: 10 }} />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#00478d" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+
+              {chartType === 'pie' && dataParType.length > 0 && (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie data={dataParType} dataKey="count"
+                      nameKey="type" cx="50%" cy="50%"
+                      outerRadius={100} label>
+                      {dataParType.map((entry, i) => (
+                        <Cell key={entry.type} fill={COLORS[i % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+
+              {chartType === 'histogram' && dataParJour.length > 0 && (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={dataParJour}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="jour" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#2563eb" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+
+              {dataParType.length === 0 && (
+                <p className="text-sm text-slate-400 text-center py-8">Aucune donnée disponible</p>
+              )}
+
+              <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
               {Object.entries(stats.byType).map(([type, count]) => {
                 const percentage = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
                 return (
@@ -287,6 +393,7 @@ export default function ReportsPage() {
                   </div>
                 );
               })}
+              </div>
             </div>
 
             <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20">

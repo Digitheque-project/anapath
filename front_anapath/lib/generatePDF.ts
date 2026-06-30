@@ -11,80 +11,58 @@ export async function generatePDF(
        .filter(Boolean).join(' ')
     ?? examen?.patientId ?? '—';
   const age = patient?.dateNaissance
-    ? `${calcAge(patient.dateNaissance)} ans`
-    : patient?.age ? `${patient.age} ans` : '—';
-  const sexe = patient?.sexe === 'MALE' ? 'Masculin'
-    : patient?.sexe === 'FEMALE' ? 'Féminin' : '—';
-  const dateNaiss = patient?.dateNaissance
-    ? new Date(patient.dateNaissance)
-        .toLocaleDateString('fr-FR') : '—';
+    ? calcAge(patient.dateNaissance)
+    : patient?.age ?? '—';
+  const identifiant = examen?.patientId ?? '—';
+  const typePrelevement = formatTypeExamen(
+    examen?.typeExamen ?? '',
+  );
+  const descPrelevement = examen?.prelevement?.description
+    ?? '';
+  const cd = examen?.prelevement?.clinicalData ?? {};
+  const renseignementClinique = cd.clinicalNotes
+    ?? cd.alertes
+    ?? examen?.metadata?.alertes
+    ?? (descPrelevement || '—');
+  const suspicionDiagnostique = cd.suspicion
+    ?? cd.suspicion_diagnostique ?? '—';
+  const prescripteur = examen?.metadata?.prescripteurNom
+    ?? examen?.metadata?.prescripteurId ?? '—';
+  const resultat = examen?.resultat?.details
+    ?? examen?.resultatDetails ?? '';
+  const conclusion = examen?.resultat?.conclusion
+    ?? examen?.resultatConclusion ?? '';
+  const signature = examen?.validatedBySignature ?? '';
+  const numOrdre = examen?.validatedByUserId ?? '';
+  const anapathId = examen?.anapathId ?? examen?.id ?? '—';
+  const dateAujourdhui = new Date().toLocaleDateString(
+    'fr-FR', { day: 'numeric', month: 'long', year: 'numeric' },
+  );
 
-  const anapathId    = examen?.anapathId ?? examen?.id ?? '—';
-  const serviceNom   = examen?.metadata?.serviceNom
-    ?? examen?.metadata?.serviceId ?? '—';
-  const chuNom       = examen?.metadata?.chuNom
-    ?? 'CHU Andrainjato – Fianarantsoa';
-  const prescripteur = examen?.metadata?.prescripteurId ?? '—';
-  const urgence      = examen?.urgence
-    ?? examen?.metadata?.urgence ?? 'NORMALE';
-  const typeExamen   = formatTypeExamen(examen?.typeExamen ?? '');
-  const site         = examen?.prelevement?.site ?? '—';
-  const descPrelevement = examen?.prelevement?.description ?? '—';
-  const cd           = examen?.prelevement?.clinicalData ?? {};
-  const resultat     = examen?.resultat?.details
-    ?? examen?.resultatDetails ?? '—';
-  const conclusion   = examen?.resultat?.conclusion
-    ?? examen?.resultatConclusion ?? '—';
-  const signature    = examen?.validatedBySignature ?? '—';
-  const numOrdre     = examen?.validatedByUserId ?? '—';
-  const hash         = examen?.validationHash ?? '—';
-  const dateValid    = examen?.validatedAt
-    ? new Date(examen.validatedAt)
-        .toLocaleString('fr-FR', { hour12: false }) : '—';
-  const dateCreation = examen?.createdAt
-    ? new Date(examen.createdAt)
-        .toLocaleDateString('fr-FR') : '—';
+  const logoBase64 = await loadImageAsBase64('/assets/logo-chu.png');
 
   const personnel = [
     { f: 'Chef de service',
       n: 'P. ANDRIAMAMPIONONA T. Francine' },
-    { f: 'Chef de travaux',    n: 'Dr LAZA Odilon' },
-    { f: 'Spécialiste',        n: 'Dr RAZAFIMAHEFA Joëlle' },
+    { f: 'Chef de travaux', n: 'Dr LAZA Odilon' },
+    { f: 'Spécialiste', n: 'Dr RAZAFIMAHEFA Joëlle' },
     { f: 'Interne qualifiant', n: '' },
     { f: 'Histotechnicien(ne)s',
       n: 'MILIARISOA Pergaudine\nRAVONINTSALAMA Sarindra' },
-    { f: 'Secrétaire',
-      n: 'RAHERIMAMINIAINA Narison' },
-    { f: "Personnel d'appui",  n: 'RASOARIVONJY Nadia' },
+    { f: 'Secrétaire', n: 'RAHERIMAMINIAINA Narison' },
+    { f: "Personnel d'appui", n: 'RASOARIVONJY Nadia' },
   ];
 
-  const row = (label: string, value: string) => `
-    <div class="row">
-      <div class="row-label">${label} :</div>
-      <div class="row-value">${value ?? '—'}</div>
-    </div>`;
-
-  const champsCliniques = [
-    cd.organe       ? row('Organe', cd.organe) : '',
-    cd.localisation ? row('Localisation', cd.localisation) : '',
-    cd.fixateur     ? row('Fixateur', cd.fixateur) : '',
-    cd.nature       ? row('Nature', cd.nature) : '',
-    cd.etat_col     ? row('État du col', cd.etat_col) : '',
-    cd.type_liquide ? row('Type liquide', cd.type_liquide) : '',
-    cd.alertes      ? row('Alertes', cd.alertes) : '',
-  ].join('');
-
   const personnelHTML = personnel.map(p => `
-    <div style="margin-bottom:10px;">
+    <div style="margin-bottom:14px;">
       <div style="font-size:9px;font-style:italic;
-        color:#555;text-transform:uppercase;">
-        ${p.f}
-      </div>
-      <div style="font-weight:bold;font-size:10px;
-        white-space:pre-line;
-        min-height:${p.n ? 'auto' : '30px'};
-        border-bottom:1px dotted #ccc;
-        padding-bottom:2px;">
+        color:#555;text-transform:uppercase;
+        letter-spacing:0.3px;">${p.f}</div>
+      <div style="font-weight:bold;font-size:10.5px;
+        white-space:pre-line;color:#000;
+        min-height:${p.n ? 'auto' : '32px'};
+        border-bottom:1px dotted #bbb;
+        padding-bottom:3px;margin-top:2px;">
         ${p.n || '&nbsp;'}
       </div>
     </div>`).join('');
@@ -98,183 +76,174 @@ body{
   font-size:11px;color:#000;background:white;
   width:794px;
 }
-.page{width:794px;background:white;}
+.page{width:794px;background:white;padding:6px;}
 .header{
   display:flex;align-items:center;
   justify-content:space-between;
-  border-bottom:2.5px solid #000;
-  padding-bottom:10px;margin-bottom:8px;
+  margin-bottom:6px;
 }
-.logo-box{
-  width:75px;height:75px;border:1px solid #999;
-  display:flex;align-items:center;
-  justify-content:center;font-size:7px;
-  text-align:center;color:#555;
-  padding:4px;flex-shrink:0;
-}
-.header-center{text-align:center;flex:1;padding:0 12px;}
+.logo-img{width:65px;height:65px;object-fit:contain;}
+.header-center{text-align:center;flex:1;}
 .republic{
-  font-size:13px;font-weight:bold;
-  letter-spacing:1px;text-transform:uppercase;
+  font-size:13px;font-weight:normal;
+  letter-spacing:0.5px;
 }
-.devise{font-size:10px;font-style:italic;margin:2px 0;}
-.ministere{
-  border-top:1px solid #000;border-bottom:1px solid #000;
-  padding:2px 0;margin:3px 0;
-  font-size:10px;font-weight:bold;
+.devise{font-size:10px;margin-top:2px;}
+.titre-principal{
+  text-align:center;font-size:13px;font-weight:bold;
+  text-decoration:underline;margin:10px 0 14px 0;
+  text-transform:uppercase;
 }
-.dossier-info{
+.infos-patient{
   display:flex;justify-content:space-between;
-  font-size:10px;margin-bottom:6px;
-  padding:4px 6px;background:#f0f4f8;
-  border:1px solid #ccc;
+  margin-bottom:14px;
 }
-.body-cols{display:flex;border:1.5px solid #555;}
+.infos-left{flex:1;}
+.infos-left p{
+  font-size:11px;margin-bottom:6px;line-height:1.5;
+}
+.infos-left .underline-field{
+  border-bottom:1px solid #000;
+  display:inline-block;min-width:200px;
+  padding-bottom:1px;
+}
+.prescripteur-box{
+  font-size:11px;height:fit-content;
+  margin-top:2px;
+}
+.body-cols{
+  display:flex;gap:14px;
+}
 .col-left{
-  width:33%;border-right:1.5px solid #555;
-  padding:10px 8px;background:#f9f9f9;
+  width:38%;
+  border:1px solid #ccc;
+  padding:10px 8px;
+  background:white;
 }
 .col-left-title{
-  text-align:center;font-size:9px;font-weight:bold;
-  text-transform:uppercase;
-  border-bottom:1px solid #999;
-  padding-bottom:5px;margin-bottom:8px;
+  text-align:center;font-size:9.5px;font-weight:bold;
+  text-transform:uppercase;letter-spacing:0.5px;
+  border-bottom:1.5px solid #333;
+  padding-bottom:6px;margin-bottom:10px;
 }
-.col-right{width:67%;padding:8px 10px;}
-.section{margin-bottom:7px;}
-.section-title{
-  background:#1a3a5c;color:white;
-  padding:2px 6px;font-weight:bold;
-  font-size:9px;text-transform:uppercase;
-  margin-bottom:3px;
+.col-right{width:62%;}
+.box-resultat, .box-conclusion{
+  border:1px solid #000;
+  padding:10px;
+  margin-bottom:14px;
 }
-.row{
-  display:flex;border-bottom:1px dotted #ddd;
-  padding:1.5px 0;gap:6px;
+.box-resultat{min-height:200px;}
+.box-conclusion{min-height:100px;}
+.box-title{
+  font-weight:bold;text-decoration:underline;
+  font-size:11px;margin-bottom:8px;
 }
-.row-label{
-  width:110px;flex-shrink:0;
-  font-weight:bold;font-size:9px;color:#333;
+.box-content{
+  font-size:10.5px;white-space:pre-wrap;
+  line-height:1.5;
 }
-.row-value{flex:1;font-size:10px;}
-.result-box{
-  border:1px solid #ccc;padding:5px;
-  min-height:55px;background:white;
-  white-space:pre-wrap;font-size:10px;
-  margin-bottom:4px;
+.footer-zone{
+  margin-top:20px;
+  display:flex;
+  justify-content:flex-end;
 }
-.conclusion-box{
-  border:1.5px solid #000;padding:6px;
-  min-height:35px;font-weight:bold;
-  white-space:pre-wrap;font-size:10px;
+.date-signature{
+  text-align:right;
+  width:280px;
 }
-.hash-box{
-  font-family:monospace;font-size:7px;
-  word-break:break-all;background:#f5f5f5;
-  padding:2px 4px;border:1px solid #ddd;
+.date-fait{
+  font-size:10.5px;margin-bottom:30px;
 }
-.footer{
-  margin-top:6px;border-top:1px solid #999;
-  padding-top:3px;font-size:8px;
-  color:#666;text-align:center;
+.signature-line{
+  border-top:1px solid #000;
+  padding-top:4px;
+  font-size:9px;
+  text-align:center;
+}
+.signature-zone{
+  height:50px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  font-size:10px;
+  font-style:italic;
+  color:#333;
 }
 </style></head><body>
 <div class="page">
   <div class="header">
-    <div class="logo-box">LOGO<br/>CHU<br/>ANDRAINJATO</div>
+    <img src="${logoBase64}" class="logo-img"/>
     <div class="header-center">
       <div class="republic">REPOBLIKAN'I MADAGASIKARA</div>
       <div class="devise">
-        Fitiavana – Tanindrazana – Fandrosoana
-      </div>
-      <div class="ministere">
-        MINISTÈRE DE LA SANTÉ PUBLIQUE
-      </div>
-      <div style="font-size:10px;font-weight:bold;">
-        ${chuNom}
-      </div>
-      <div style="font-size:12px;font-weight:bold;
-        margin-top:3px;text-transform:uppercase;">
-        Service d'Anatomie Pathologique
+        Fitiavana – Tanindrazana - Fandrosoana
       </div>
     </div>
-    <div class="logo-box">LOGO<br/>LABO<br/>ANAPATH</div>
+    <img src="${logoBase64}" class="logo-img"/>
   </div>
 
-  <div class="dossier-info">
-    <div><strong>N° Dossier :</strong> ${anapathId}</div>
-    <div><strong>Réception :</strong> ${dateCreation}</div>
-    <div><strong>Validation :</strong> ${dateValid}</div>
+  <div class="titre-principal">
+    Compte Rendu d'Examen Anatomo-Pathologique
+  </div>
+
+  <div class="infos-patient">
+    <div class="infos-left">
+      <p>Nom : <span class="underline-field">
+        ${escapeHtml(nomPatient)}</span></p>
+      <p>Identifiant : <span class="underline-field">
+        ${escapeHtml(identifiant)}</span></p>
+      <p>Age : <span class="underline-field"
+        style="min-width:60px;">${escapeHtml(String(age))}</span> ans</p>
+      <p>Type de prélèvement : <span class="underline-field">
+        ${escapeHtml(typePrelevement)}</span></p>
+      <p>Renseignement clinique : <span class="underline-field">
+        ${escapeHtml(String(renseignementClinique))}</span></p>
+      <p>Suspicion diagnostique : <span class="underline-field">
+        ${escapeHtml(String(suspicionDiagnostique))}</span></p>
+    </div>
+    <div class="prescripteur-box">
+      Prescripteur : Dr ${escapeHtml(String(prescripteur))}
+    </div>
   </div>
 
   <div class="body-cols">
     <div class="col-left">
-      <div class="col-left-title">Personnel du Service</div>
+      <div class="col-left-title">
+        Personnel du Service<br/>
+        <span style="font-weight:normal;
+          text-transform:none;font-size:8.5px;
+          font-style:italic;">
+          Anatomie Pathologique
+        </span>
+      </div>
       ${personnelHTML}
     </div>
+
     <div class="col-right">
-
-      <div class="section">
-        <div class="section-title">1. Identité du patient</div>
-        ${row('Nom complet', nomPatient)}
-        ${row('ID Patient', examen?.patientId ?? '—')}
-        ${row('Date naissance', dateNaiss)}
-        ${row('Âge', age)}
-        ${row('Sexe', sexe)}
-        ${row('CIN', patient?.cin ?? '—')}
-        ${row('Téléphone', patient?.telephone ?? '—')}
-        ${row('Adresse', patient?.adresse ?? '—')}
+      <div class="box-resultat">
+        <div class="box-title">RESULTAT :</div>
+        <div class="box-content">${escapeHtml(resultat)}</div>
       </div>
-
-      <div class="section">
-        <div class="section-title">2. Prescription</div>
-        ${row('Service demandeur', serviceNom)}
-        ${row('CHU', chuNom)}
-        ${row('Prescripteur', prescripteur)}
-        ${row('Urgence', urgence)}
-        ${row("Type d'examen", typeExamen)}
+      <div class="box-conclusion">
+        <div class="box-title">CONCLUSION :</div>
+        <div class="box-content">${escapeHtml(conclusion)}</div>
       </div>
-
-      <div class="section">
-        <div class="section-title">3. Prélèvement</div>
-        ${row('Site', site)}
-        ${row('Description', descPrelevement)}
-        ${champsCliniques}
-      </div>
-
-      <div class="section">
-        <div class="section-title">4. Résultat</div>
-        <div class="result-box">${resultat}</div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">
-          5. Conclusion diagnostique
-        </div>
-        <div class="conclusion-box">${conclusion}</div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">6. Validation</div>
-        ${row('Signé par', signature)}
-        ${row("N° d'ordre", numOrdre)}
-        ${row('Date / Heure', dateValid)}
-        <div class="row">
-          <div class="row-label">Hash SHA-256 :</div>
-          <div class="row-value">
-            <div class="hash-box">${hash}</div>
-          </div>
-        </div>
-      </div>
-
     </div>
   </div>
 
-  <div class="footer">
-    Document généré le
-    ${new Date().toLocaleString('fr-FR', { hour12: false })}
-    &nbsp;—&nbsp;${chuNom} – Service d'Anatomie Pathologique
-    &nbsp;—&nbsp;Confidentiel – Usage médical exclusif
+  <div class="footer-zone">
+    <div class="date-signature">
+      <div class="date-fait">
+        Fait à Fianarantsoa, le ${dateAujourdhui}
+      </div>
+      <div class="signature-zone">
+        ${signature ? escapeHtml(signature) : ''}
+      </div>
+      <div class="signature-line">
+        Signature
+        ${numOrdre ? `<br/>N° Ordre : ${escapeHtml(numOrdre)}` : ''}
+      </div>
+    </div>
   </div>
 </div>
 </body></html>`;
@@ -283,10 +252,8 @@ body{
   iframe.style.cssText = `
     position:fixed;top:0;left:0;
     width:794px;height:1123px;
-    opacity:0.01;
-    pointer-events:none;
-    z-index:-999;
-    border:none;
+    opacity:0.01;pointer-events:none;
+    z-index:-999;border:none;
   `;
   document.body.appendChild(iframe);
 
@@ -301,27 +268,20 @@ body{
     await new Promise(r => setTimeout(r, 800));
 
     const opt = {
-      margin:      10,
-      filename:    `CR-Anapath-${anapathId}.pdf`,
-      image:       { type: 'jpeg' as const, quality: 0.98 },
+      margin: 10,
+      filename: `CR-Anapath-${anapathId}.pdf`,
+      image: { type: 'jpeg' as const, quality: 0.98 },
       html2canvas: {
-        scale:       2,
-        useCORS:     true,
-        logging:     false,
-        windowWidth: 794,
+        scale: 2, useCORS: true,
+        logging: false, windowWidth: 794,
       },
       jsPDF: {
-        unit:        'mm' as const,
-        format:      'a4' as const,
+        unit: 'mm' as const, format: 'a4' as const,
         orientation: 'portrait' as const,
       },
     };
 
-    await html2pdf()
-      .set(opt)
-      .from(doc.body)
-      .save();
-
+    await html2pdf().set(opt).from(doc.body).save();
     await new Promise(r => setTimeout(r, 300));
   } finally {
     if (document.body.contains(iframe)) {
@@ -332,6 +292,29 @@ body{
 
 export function getTypeLabel(type: string): string {
   return formatTypeExamen(type);
+}
+
+async function loadImageAsBase64(url: string): Promise<string> {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return url;
+  }
+}
+
+function escapeHtml(s: string): string {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 function calcAge(d: string): number {
@@ -345,12 +328,12 @@ function calcAge(d: string): number {
 
 function formatTypeExamen(t: string): string {
   const m: Record<string, string> = {
-    BIOPSIE:          'Biopsie tissulaire',
-    FCV_PAP:          'Frottis cervico-vaginal / Pap test',
-    CYT0PONCTION:     'Cytoponction',
-    LIQUIDE:          'Liquide biologique',
-    POS:              'Prélèvement Organique Standard',
-    POC:              'Prélèvement Organique Complexe',
+    BIOPSIE: 'Biopsie tissulaire',
+    FCV_PAP: 'Frottis cervico-vaginal / Pap test',
+    CYT0PONCTION: 'Cytoponction',
+    LIQUIDE: 'Liquide biologique',
+    POS: 'Prélèvement Organique Standard',
+    POC: 'Prélèvement Organique Complexe',
     EXTEMPORANE_STAT: 'Examen extemporané (STAT)',
   };
   return m[t] ?? t;

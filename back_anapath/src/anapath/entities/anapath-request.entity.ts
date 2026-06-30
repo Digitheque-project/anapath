@@ -97,6 +97,15 @@ export class AnapathRequest {
   @Column({ nullable: true })
   motifAnnulation: string;
 
+  @Column({ default: false })
+  notificationLue: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  notificationLueAt: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  derniereRelanceAt: Date;
+
   @CreateDateColumn()
   createdAt: Date;
 

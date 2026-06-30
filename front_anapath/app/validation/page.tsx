@@ -8,7 +8,7 @@ import PatientIdentitySection, { PatientInfo } from '@/components/PatientIdentit
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
 import { formatDateLong } from '@/lib/dateFormat';
-import { getPatientForExamen } from '@/lib/api';
+import { getPatientForExamen, marquerNotifLue } from '@/lib/api';
 import { getTypeLabel } from '@/lib/generatePDF';
 
 interface AnapathRequest {
@@ -86,7 +86,11 @@ function ValidationPageContent() {
     setFilteredRequests(filtered);
 
     if (preselectedId && filtered.length > 0) {
-      const found = filtered.find((req: AnapathRequest) => req.id === preselectedId);
+      const found = filtered.find(
+        (req: AnapathRequest) =>
+          req.id === preselectedId ||
+          req.anapathId === preselectedId,
+      );
       if (found) {
         setSelectedRequest(found);
         populateFields(found);
@@ -136,7 +140,11 @@ function ValidationPageContent() {
       setFilteredRequests(pendingRequests);
 
       if (preselectedId) {
-        const found = pendingRequests.find((req: AnapathRequest) => req.id === preselectedId);
+        const found = pendingRequests.find(
+          (req: AnapathRequest) =>
+            req.id === preselectedId ||
+            req.anapathId === preselectedId,
+        );
         if (found) {
           setSelectedRequest(found);
           populateFields(found);
@@ -186,6 +194,9 @@ function ValidationPageContent() {
         statut: 'RESULTAT_DISPONIBLE',
         prelevement: prelevementData,
       });
+
+      await marquerNotifLue(selectedRequest.id);
+
       await fetchData();
       if (selectedRequest) {
         const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${selectedRequest.id}`);
@@ -243,6 +254,9 @@ function ValidationPageContent() {
         hash,
         statut: 'VALIDE',
       });
+
+      await marquerNotifLue(selectedRequest.id);
+
       alert('Demande validée avec succès !');
       await fetchData();
       if (filteredRequests.length > 1) {
@@ -321,7 +335,7 @@ function ValidationPageContent() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-[#f9f9ff]">
+      <div className="flex min-h-screen bg-transparent">
         <Sidebar />
         <main className="flex-1 ml-64 flex items-center justify-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -331,7 +345,7 @@ function ValidationPageContent() {
   }
 
   return (
-    <div className="flex min-h-screen bg-surface text-on-surface">
+    <div className="flex min-h-screen bg-transparent text-on-surface">
       <div className="fixed inset-0 grain-overlay z-[60] pointer-events-none"></div>
       <Sidebar />
       <main className="flex-1 ml-64 min-h-screen flex flex-col w-[calc(100%-256px)]">
@@ -575,7 +589,7 @@ export default function ValidationPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen bg-[#f9f9ff]">
+        <div className="flex min-h-screen bg-transparent">
           <Sidebar />
           <main className="flex-1 ml-64 flex items-center justify-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />

@@ -60,18 +60,60 @@ export class AnapathController {
   @ApiOperation({ summary: 'Notifications du service Anapath' })
   @Header('Content-Type', 'application/json; charset=utf-8')
   async getNotifications() {
-    const base = process.env.NOTIF_SERVICE_URL
-      ?? 'https://prescription-back-7m7a.onrender.com';
-    const svcId = process.env.ANAPATH_SERVICE_ID
-      ?? '14a94274-db57-49e3-9375-1e642729b92b';
+    const base =
+      process.env.NOTIF_SERVICE_URL ??
+      'https://prescription-back-7m7a.onrender.com';
+    const svcId =
+      process.env.ANAPATH_SERVICE_ID ??
+      '14a94274-db57-49e3-9375-1e642729b92b';
     try {
-      const res = await fetch(
-        `${base}/notifications/service/${svcId}`,
-        { signal: AbortSignal.timeout(5000) },
-      );
+      const res = await fetch(`${base}/notifications/service/${svcId}`, {
+        signal: AbortSignal.timeout(5000),
+      });
       if (!res.ok) return [];
-      const data = await res.json();
-      return sortNotifications(Array.isArray(data) ? data : []);
+      const notifs = await res.json();
+      if (!Array.isArray(notifs)) return [];
+
+      const enriched = await Promise.all(
+        notifs.map(async (n: any) => {
+          const anapathId =
+            n.metadata?.anapathId ?? n.referenceId ?? n.examId;
+          if (!anapathId) return n;
+
+          try {
+            const examen = await this.service.findByAnapathId(anapathId);
+            if (!examen) return n;
+
+            const metadata = examen.metadata as Record<string, unknown> | null;
+            return {
+              ...n,
+              enriched: {
+                anapathId: examen.anapathId,
+                typeExamen: examen.typeExamen,
+                statut: examen.statut,
+                urgence:
+                  (metadata?.urgence as string) ??
+                  (examen.isExtemporane ? 'STAT' : 'NORMALE'),
+                serviceNom:
+                  (metadata?.serviceNom as string) ??
+                  (metadata?.serviceId as string) ??
+                  '—',
+                patientId: examen.patientId,
+                createdAt: examen.createdAt,
+                lu:
+                  examen.notificationLue &&
+                  ['RESULTAT_DISPONIBLE', 'VALIDE', 'ARCHIVE'].includes(
+                    examen.statut,
+                  ),
+              },
+            };
+          } catch {
+            return n;
+          }
+        }),
+      );
+
+      return enriched;
     } catch (e) {
       console.warn('Notifications indisponibles:', e);
       return [];
@@ -152,6 +194,58 @@ export class AnapathController {
   @Header('Content-Type', 'application/json; charset=utf-8')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
+  }
+
+  @Patch(':id/notification-lue')
+  @ApiOperation({ summary: 'Marquer notif comme lue pour cet examen' })
+  @Header('Content-Type', 'application/json; charset=utf-8')
+  async marquerNotifLue(@Param('id') id: string) {
+    let examen = await this.service.findByAnapathId(id);
+    if (!examen) {
+      try {
+        examen = await this.service.findOneEntity(id);
+      } catch {
+        throw new NotFoundException();
+      }
+    }
+    examen.notificationLue = true;
+    examen.notificationLueAt = new Date();
+    await this.service.save(examen);
+
+    const base =
+      process.env.NOTIF_SERVICE_URL ??
+      'https://prescription-back-7m7a.onrender.com';
+    const svcId =
+      process.env.ANAPATH_SERVICE_ID ??
+      '14a94274-db57-49e3-9375-1e642729b92b';
+    try {
+      const res = await fetch(`${base}/notifications/service/${svcId}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const notifs = await res.json();
+        const matching = Array.isArray(notifs)
+          ? notifs.filter(
+              (n: any) =>
+                n.metadata?.anapathId === examen.anapathId ||
+                n.referenceId === examen.anapathId ||
+                n.examId === examen.anapathId,
+            )
+          : [];
+        await Promise.all(
+          matching.map((n: any) =>
+            fetch(`${base}/notifications/${n.id ?? n._id}/lire`, {
+              method: 'PUT',
+              signal: AbortSignal.timeout(3000),
+            }).catch(() => {}),
+          ),
+        );
+      }
+    } catch (e) {
+      console.warn('Marquage notif externe échoué:', e);
+    }
+
+    return { success: true };
   }
 
   @Patch(':id')

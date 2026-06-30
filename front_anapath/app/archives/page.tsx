@@ -80,7 +80,7 @@ export default function ArchivesPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-[#f9f9ff]">
+      <div className="flex min-h-screen bg-transparent">
         <Sidebar />
         <main className="flex-1 ml-64 flex items-center justify-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -90,7 +90,7 @@ export default function ArchivesPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#f9f9ff] text-[#191c21]">
+    <div className="flex min-h-screen bg-transparent text-[#191c21]">
       <div className="fixed inset-0 grain-overlay z-[60] pointer-events-none"></div>
       <Sidebar />
       <main className="flex-1 ml-64 min-h-screen flex flex-col w-[calc(100%-256px)]">

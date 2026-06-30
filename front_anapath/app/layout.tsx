@@ -35,7 +35,18 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className={`${inter.variable} ${manrope.variable} font-body bg-surface text-on-surface antialiased`}>
+      <body className={`${inter.variable} ${manrope.variable} font-body text-on-surface antialiased`}>
+        <div
+          className="fixed top-0 left-64 right-0 bottom-0 -z-20 pointer-events-none"
+          style={{
+            backgroundImage: `url('/assets/bg-content.jpg')`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            filter: 'blur(2px)',
+            opacity: 0.4,
+          }}
+        />
+        <div className="fixed top-0 left-64 right-0 bottom-0 -z-20 bg-white/60 pointer-events-none" />
         <ThemeProvider>
           <SearchProvider>  {/* ← ajout */}
             <div className="grain-overlay"></div>

@@ -1,7 +1,6 @@
 'use client';
 
 import NotificationBell from './NotificationBell';
-import SettingsMenu from './SettingsMenu';
 import { useSearch } from './SearchContext';
 
 const DOCTOR_NAME = 'Aris Thorne';
@@ -47,8 +46,6 @@ export default function TopBar() {
             <span className="material-symbols-outlined text-[#00478d] text-sm">person</span>
           </div>
         </div>
-        
-        <SettingsMenu />
       </div>
     </header>
   );

@@ -96,3 +96,26 @@ export async function markNotificationAsRead(id: string): Promise<void> {
     });
   } catch {}
 }
+
+export async function marquerNotifLue(examId: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/anapath/${examId}/notification-lue`, {
+      method: 'PATCH',
+    });
+  } catch {}
+}
+
+export async function getExamenStatut(
+  examId: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE}/anapath/${examId}`, {
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const d = await res.json();
+    return d?.statut ?? null;
+  } catch {
+    return null;
+  }
+}

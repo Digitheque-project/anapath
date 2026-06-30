@@ -16,7 +16,8 @@
     "jspdf-autotable": "^5.0.8",
     "next": "^15.5.18",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "recharts": "^3.9.0"
   },
   "devDependencies": {
     "@tailwindcss/container-queries": "^0.1.1",

@@ -36,11 +36,25 @@ export default function WorklistPage() {
 
   useEffect(() => {
     let filtered = requests;
+    const enCours = ['CREEE', 'EN_ATTENTE', 'EN_COURS', 'RESULTAT_DISPONIBLE'];
     if (filter === 'pending') {
-      filtered = filtered.filter(req => req.statut !== 'VALIDE' && req.statut !== 'ARCHIVE');
+      filtered = filtered.filter(req => enCours.includes(req.statut));
     } else if (filter === 'validated') {
       filtered = filtered.filter(req => req.statut === 'VALIDE' || req.statut === 'ARCHIVE');
     }
+    filtered = [...filtered].sort((a, b) => {
+      const prio = (s: string) => {
+        if (s === 'RESULTAT_DISPONIBLE') return 0;
+        if (s === 'CREEE' || s === 'EN_ATTENTE' || s === 'EN_COURS') return 1;
+        return 2;
+      };
+      const pa = prio(a.statut);
+      const pb = prio(b.statut);
+      if (pa !== pb) return pa - pb;
+      if (a.isExtemporane && !b.isExtemporane) return -1;
+      if (!a.isExtemporane && b.isExtemporane) return 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
     setFilteredRequests(filterAndSortAnapathRequests(filtered, searchQuery));
   }, [searchQuery, filter, requests]);
 
@@ -72,7 +86,7 @@ export default function WorklistPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-[#f9f9ff]">
+      <div className="flex min-h-screen bg-transparent">
         <Sidebar />
         <main className="flex-1 ml-64 flex items-center justify-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -82,7 +96,7 @@ export default function WorklistPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#f9f9ff] text-[#191c21]">
+    <div className="flex min-h-screen bg-transparent text-[#191c21]">
       <div className="fixed inset-0 grain-overlay z-[60] pointer-events-none"></div>
       <Sidebar />
       <main className="flex-1 ml-64 min-h-screen flex flex-col w-[calc(100%-256px)]">
@@ -119,10 +133,28 @@ export default function WorklistPage() {
                         </span>
                       </td>
                       <td className="p-4 text-xs text-slate-500">{req.prelevement?.site || '-'}</td>
-                      <td className="p-4"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${statusColors[req.statut] || 'bg-gray-100 text-gray-700'}`}>{statusLabels[req.statut] || req.statut}</span></td>
+                      <td className="p-4">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          req.statut === 'RESULTAT_DISPONIBLE'
+                            ? 'bg-amber-100 text-amber-800'
+                            : statusColors[req.statut] || 'bg-gray-100 text-gray-700'
+                        }`}>
+                          {statusLabels[req.statut] || req.statut}
+                        </span>
+                      </td>
                       <td className="p-4 text-slate-500 text-xs">{formatDate(req.createdAt)}</td>
                       <td className="p-4 text-center">
-                        <Link href={`/worklist/${req.id}`} className="p-2 text-slate-400 hover:text-primary transition-colors inline-block">
+                        <Link
+                          href={
+                            req.statut === 'RESULTAT_DISPONIBLE' ||
+                            req.statut === 'CREEE' ||
+                            req.statut === 'EN_ATTENTE' ||
+                            req.statut === 'EN_COURS'
+                              ? `/validation?id=${req.anapathId}`
+                              : `/worklist/${req.id}`
+                          }
+                          className="p-2 text-slate-400 hover:text-primary transition-colors inline-block"
+                        >
                           <span className="material-symbols-outlined text-base">visibility</span>
                         </Link>
                       </td>

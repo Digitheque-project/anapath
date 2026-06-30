@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Cron } from '@nestjs/schedule';
 import { AnapathRequest, Statut } from './entities/anapath-request.entity';
 import { CreateAnapathDto } from './dto/create-anapath.dto';
 import { UpdateAnapathDto } from './dto/update-anapath.dto';
@@ -92,6 +93,14 @@ export class AnapathService {
     return request;
   }
 
+  async findByAnapathId(anapathId: string): Promise<AnapathRequest | null> {
+    return this.anapathRepository.findOne({ where: { anapathId } });
+  }
+
+  async save(entity: AnapathRequest): Promise<AnapathRequest> {
+    return this.anapathRepository.save(entity);
+  }
+
   async update(id: string, updateDto: UpdateAnapathDto): Promise<AnapathRequestResponse> {
     const request = await this.findOneEntity(id);
 
@@ -177,4 +186,77 @@ export class AnapathService {
     const saved = await this.anapathRepository.save(request);
     return this.toResponse(saved);
   }
+
+  @Cron('0 8 * * *')
+  async relanceExamensNonValides() {
+    const examens = await this.anapathRepository.find({
+      where: { statut: Statut.RESULTAT_DISPONIBLE },
+    });
+
+    const base =
+      process.env.NOTIF_SERVICE_URL ??
+      'https://prescription-back-7m7a.onrender.com';
+    const svcId =
+      process.env.ANAPATH_SERVICE_ID ??
+      '14a94274-db57-49e3-9375-1e642729b92b';
+
+    for (const examen of examens) {
+      const maintenant = new Date();
+      const derniereRelance = examen.derniereRelanceAt;
+      const doitRelancer =
+        !derniereRelance ||
+        maintenant.getTime() - derniereRelance.getTime() >= 23 * 60 * 60 * 1000;
+
+      if (!doitRelancer) continue;
+
+      const metadata = examen.metadata as Record<string, unknown> | null;
+      const message =
+        `⏰ Rappel : Validez l'examen ${examen.anapathId}` +
+        ` — ${examen.typeExamen}` +
+        ` — Patient: ${examen.patientId}` +
+        ` — Service: ${metadata?.serviceNom ?? '—'}` +
+        ` — Résultat saisi depuis ${formatTimeSince(examen.updatedAt)}` +
+        `. Le temps passe !`;
+
+      try {
+        await fetch(`${base}/notifications`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            destinataire: svcId,
+            service: svcId,
+            titre: `Rappel validation — ${examen.anapathId}`,
+            message,
+            type: 'RAPPEL_VALIDATION',
+            urgence: 'NORMALE',
+            metadata: {
+              anapathId: examen.anapathId,
+              typeExamen: examen.typeExamen,
+              patientId: examen.patientId,
+              serviceNom: metadata?.serviceNom,
+              isRelance: true,
+            },
+          }),
+          signal: AbortSignal.timeout(5000),
+        });
+
+        examen.derniereRelanceAt = maintenant;
+        await this.anapathRepository.save(examen);
+        console.log(`✅ Relance envoyée : ${examen.anapathId}`);
+      } catch (e) {
+        console.warn(`Relance échouée ${examen.anapathId}:`, e);
+      }
+    }
+  }
+}
+
+function formatTimeSince(date: Date): string {
+  if (!date) return '—';
+  const diff = Date.now() - new Date(date).getTime();
+  const jours = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const heures = Math.floor(
+    (diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
+  );
+  if (jours > 0) return `${jours}j ${heures}h`;
+  return `${heures}h`;
 }
