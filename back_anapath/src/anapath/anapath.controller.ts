@@ -6,6 +6,7 @@ import { ValidateAnapathDto } from './dto/validate-anapath.dto';
 import { AnapathRequest } from './entities/anapath-request.entity';
 import { ChuClient } from '../common/clients/chu.client';
 import { AccueilClient } from '../common/clients/accueil.client';
+import { NotificationClient } from '../common/clients/notification.client';
 
 function sortNotifications(notifs: any[]): any[] {
   const urgencePriority: Record<string, number> = { STAT: 1, URGENTE: 2, NORMALE: 3 };
@@ -21,9 +22,10 @@ function sortNotifications(notifs: any[]): any[] {
 @Controller('anapath')
 export class AnapathController {
   constructor(
-    private readonly service: AnapathService,
+    private readonly anapathService: AnapathService,
     private readonly chuClient: ChuClient,
     private readonly accueilClient: AccueilClient,
+    private readonly notificationClient: NotificationClient,
   ) {}
 
   @Get()
@@ -31,7 +33,7 @@ export class AnapathController {
   @ApiResponse({ status: 200, description: 'Liste des demandes', type: [AnapathRequest] })
   @Header('Content-Type', 'application/json; charset=utf-8')
   findAll() {
-    return this.service.findAll();
+    return this.anapathService.findAll();
   }
 
   @Get('chu')
@@ -81,7 +83,7 @@ export class AnapathController {
           if (!anapathId) return n;
 
           try {
-            const examen = await this.service.findByAnapathId(anapathId);
+            const examen = await this.anapathService.findByAnapathId(anapathId);
             if (!examen) return n;
 
             const metadata = examen.metadata as Record<string, unknown> | null;
@@ -161,28 +163,57 @@ export class AnapathController {
   }
 
   @Get(':id/patient')
-  @ApiOperation({ summary: "Récupérer les infos patient d'un examen depuis Accueil" })
+  @ApiOperation({
+    summary: 'Récupérer les infos patient depuis Accueil',
+  })
   @ApiParam({ name: 'id', description: 'UUID de la demande' })
   @Header('Content-Type', 'application/json; charset=utf-8')
   async getPatientForExamen(@Param('id') id: string) {
-    const examen = await this.service.findOneEntity(id);
-    if (!examen) throw new NotFoundException('Examen non trouvé');
+    const examen = await this.anapathService.findOne(id);
+    if (!examen) {
+      throw new NotFoundException('Examen non trouvé');
+    }
 
-    if (examen.patientInfo?.nomComplet || (examen.patientInfo as any)?.nom) {
-      return examen.patientInfo;
+    if (examen.patientInfo?.nom) {
+      return {
+        ...examen.patientInfo,
+        nomComplet: this.accueilClient.buildNomComplet(examen.patientInfo),
+      };
+    }
+
+    const chuId = (examen.metadata?.chuId as string) ?? '';
+    if (!chuId) {
+      console.warn(`Examen ${id} sans chuId, impossible d'interroger Accueil`);
+      return this.fallbackPatient(examen);
     }
 
     const patient = await this.accueilClient.getPatient(
       examen.patientId,
-      (examen.metadata?.chuId as string) ?? '',
+      chuId,
     );
-    if (patient) return patient;
+    if (!patient) {
+      return this.fallbackPatient(examen);
+    }
 
     return {
+      ...patient,
+      nomComplet: this.accueilClient.buildNomComplet(patient),
+      age: this.accueilClient.calculateAge(patient.dateNaissance),
+    };
+  }
+
+  private fallbackPatient(examen: any) {
+    return {
+      nom: examen.patientId,
+      prenom: '',
       nomComplet: examen.patientId,
-      patientId: examen.patientId,
       age: null,
       sexe: null,
+      dateNaissance: null,
+      telephone: null,
+      adresse: null,
+      cin: null,
+      _source: 'fallback',
     };
   }
 
@@ -193,24 +224,24 @@ export class AnapathController {
   @ApiResponse({ status: 404, description: 'Demande non trouvée' })
   @Header('Content-Type', 'application/json; charset=utf-8')
   findOne(@Param('id') id: string) {
-    return this.service.findOne(id);
+    return this.anapathService.findOne(id);
   }
 
   @Patch(':id/notification-lue')
   @ApiOperation({ summary: 'Marquer notif comme lue pour cet examen' })
   @Header('Content-Type', 'application/json; charset=utf-8')
   async marquerNotifLue(@Param('id') id: string) {
-    let examen = await this.service.findByAnapathId(id);
+    let examen = await this.anapathService.findByAnapathId(id);
     if (!examen) {
       try {
-        examen = await this.service.findOneEntity(id);
+        examen = await this.anapathService.findOneEntity(id);
       } catch {
         throw new NotFoundException();
       }
     }
     examen.notificationLue = true;
     examen.notificationLueAt = new Date();
-    await this.service.save(examen);
+    await this.anapathService.save(examen);
 
     const base =
       process.env.NOTIF_SERVICE_URL ??
@@ -255,7 +286,7 @@ export class AnapathController {
   @ApiResponse({ status: 404, description: 'Demande non trouvée' })
   @Header('Content-Type', 'application/json; charset=utf-8')
   update(@Param('id') id: string, @Body() dto: UpdateAnapathDto) {
-    return this.service.update(id, dto);
+    return this.anapathService.update(id, dto);
   }
 
   @Post(':id/validate')
@@ -268,6 +299,6 @@ export class AnapathController {
   @HttpCode(200)
   @Header('Content-Type', 'application/json; charset=utf-8')
   validate(@Param('id') id: string, @Body() dto: ValidateAnapathDto) {
-    return this.service.validate(id, dto);
+    return this.anapathService.validate(id, dto);
   }
 }

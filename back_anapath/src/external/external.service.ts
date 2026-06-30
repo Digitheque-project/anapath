@@ -17,45 +17,53 @@ export class ExternalService {
     dto: CreatePrescriptionAnapathDto,
     serviceIdHeader?: string,
   ) {
-    const data = dto.data || {};
-    const { patientId, prescripteurId, urgence, alertes, typeExamen, chuId, serviceId } = dto;
-    const niveauUrgence = urgence ?? 'NORMALE';
+    const {
+      patientId,
+      prescripteurId,
+      urgence,
+      alertes,
+      typeExamen,
+      data,
+      chuId,
+      serviceId,
+    } = dto;
 
     const [patientResult, serviceResult, chuResult] = await Promise.allSettled([
-      chuId ? this.accueilClient.getPatient(patientId, chuId) : Promise.resolve(null),
-      serviceId ? this.chuClient.getService(serviceId) : Promise.resolve(null),
-      chuId ? this.chuClient.getChu(chuId) : Promise.resolve(null),
+      chuId
+        ? this.accueilClient.getPatient(patientId, chuId)
+        : Promise.resolve(null),
+      serviceId
+        ? this.chuClient.getService(serviceId)
+        : Promise.resolve(null),
+      chuId
+        ? this.chuClient.getChu(chuId)
+        : Promise.resolve(null),
     ]);
 
-    const patient = patientResult.status === 'fulfilled' ? patientResult.value : null;
-    const service = serviceResult.status === 'fulfilled' ? serviceResult.value : null;
-    const chu = chuResult.status === 'fulfilled' ? chuResult.value : null;
-
-    const patientInfo = patient
-      ? {
-          nom: patient.nom,
-          prenom: patient.prenom,
-          nomComplet: `${patient.nom} ${patient.prenom}`,
-          sexe: patient.sexe,
-          dateNaissance: patient.dateNaissance,
-          age: this.accueilClient.calculateAge(patient.dateNaissance),
-          cin: patient.cin ?? null,
-          profession: patient.profession ?? null,
-          adresse: patient.adresse ?? null,
-          telephone: patient.telephone ?? null,
-          contactUrgence: patient.contactUrgence ?? null,
-          priseEnChargeId: patient.priseEnChargeId ?? null,
-        }
+    const patient = patientResult.status === 'fulfilled'
+      ? patientResult.value
+      : null;
+    const service = serviceResult.status === 'fulfilled'
+      ? serviceResult.value
+      : null;
+    const chu = chuResult.status === 'fulfilled'
+      ? chuResult.value
       : null;
 
-    const prelevement = {
-      site: data?.organe ?? data?.type_liquide ?? data?.etat_col ?? '',
-      description: data?.nature ?? data?.volume ?? data?.localisation ?? '',
-      clinicalData: {
-        alertes: alertes ?? null,
-        ...data,
-      },
-    };
+    const patientInfo = patient ? {
+      nom: patient.nom ?? '',
+      prenom: patient.prenom ?? '',
+      sexe: patient.sexe ?? null,
+      dateNaissance: patient.dateNaissance ?? null,
+      cin: patient.cin ?? null,
+      profession: patient.profession ?? null,
+      adresse: patient.adresse ?? null,
+      telephone: patient.telephone ?? null,
+      contactUrgence: patient.contactUrgence ?? null,
+      priseEnChargeId: patient.priseEnChargeId ?? null,
+    } : null;
+
+    const prelevement = this.mapPrelevement(typeExamen, data);
 
     const metadata: Record<string, unknown> = {
       prescripteurId,
@@ -63,11 +71,11 @@ export class ExternalService {
       serviceNom: service?.name ?? 'Service inconnu',
       chuId,
       chuNom: chu?.name ?? 'CHU inconnu',
-      urgence: niveauUrgence,
+      alertes: alertes ?? null,
+      urgence: urgence ?? 'NORMALE',
       sourceService: 'prescription',
       sourceServiceId: serviceIdHeader || serviceId,
       receivedAt: new Date().toISOString(),
-      alertes,
     };
 
     const request = await this.anapathService.create({
@@ -81,9 +89,56 @@ export class ExternalService {
     });
 
     console.log(
-      `✅ Examen créé : ${request.anapathId} | Patient: ${patient?.nom ?? patientId} | Type: ${typeExamen} | Urgence: ${niveauUrgence}`,
+      `✅ Examen créé : ${request.anapathId}`,
+      `| Patient: ${patientInfo?.nom ?? patientId}`,
+      `| Type: ${typeExamen}`,
+      `| Urgence: ${urgence ?? 'NORMALE'}`,
+      `| Patient trouvé via Accueil: ${!!patient}`,
     );
 
     return request;
+  }
+
+  private mapPrelevement(typeExamen: string, data: any = {}) {
+    switch (typeExamen) {
+      case 'BIOPSIE':
+      case 'POS':
+      case 'POC':
+        return {
+          site: data.organe ?? '',
+          description: data.nature ?? data.localisation ?? '',
+          clinicalData: data,
+        };
+      case 'FCV_PAP':
+        return {
+          site: 'Col utérin',
+          description: data.etat_col ?? '',
+          clinicalData: data,
+        };
+      case 'LIQUIDE':
+        return {
+          site: data.type_liquide ?? '',
+          description: data.volume ?? '',
+          clinicalData: data,
+        };
+      case 'CYT0PONCTION':
+        return {
+          site: data.organe ?? '',
+          description: data.localisation ?? '',
+          clinicalData: data,
+        };
+      case 'EXTEMPORANE_STAT':
+        return {
+          site: data.organe ?? '',
+          description: data.urgence_chirurgicale ?? '',
+          clinicalData: data,
+        };
+      default:
+        return {
+          site: '',
+          description: '',
+          clinicalData: data,
+        };
+    }
   }
 }

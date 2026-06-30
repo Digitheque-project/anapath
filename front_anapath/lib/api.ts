@@ -28,7 +28,8 @@ export async function getPatientForExamen(examId: string): Promise<any> {
       `${API_BASE}/anapath/${examId}/patient`,
       { cache: 'no-store' },
     );
-    return res.ok ? res.json() : null;
+    if (!res.ok) return null;
+    return res.json();
   } catch {
     return null;
   }
