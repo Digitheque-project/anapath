@@ -44,7 +44,6 @@ interface Statistics {
   byType: Record<string, number>;
   byStatus: Record<string, number>;
   monthlyData: { month: string; count: number }[];
-  topDiagnostics: { code: string; name: string; count: number }[];
   tatMoyen: number;
 }
 
@@ -53,7 +52,7 @@ export default function ReportsPage() {
   const [requests, setRequests] = useState<AnapathRequest[]>([]);
   const [filteredRequests, setFilteredRequests] = useState<AnapathRequest[]>([]);
   const [stats, setStats] = useState<Statistics>({
-    total: 0, byType: {}, byStatus: {}, monthlyData: [], topDiagnostics: [], tatMoyen: 0
+    total: 0, byType: {}, byStatus: {}, monthlyData: [], tatMoyen: 0
   });
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
@@ -126,15 +125,7 @@ export default function ReportsPage() {
       monthlyData.push({ month: monthName, count });
     }
 
-    const topDiagnostics = [
-      { code: 'C50.9', name: 'Tumeur maligne du sein', count: Math.floor(Math.random() * 50) + 10 },
-      { code: 'K29.7', name: 'Gastrite', count: Math.floor(Math.random() * 40) + 5 },
-      { code: 'N60.1', name: 'Kyste mammaire', count: Math.floor(Math.random() * 30) + 5 },
-      { code: 'D12.6', name: 'Adénome du colon', count: Math.floor(Math.random() * 25) + 3 },
-      { code: 'L72.0', name: 'Kyste épidermique', count: Math.floor(Math.random() * 20) + 2 }
-    ].sort((a, b) => b.count - a.count);
-
-    setStats({ total, byType, byStatus, monthlyData, topDiagnostics, tatMoyen });
+    setStats({ total, byType, byStatus, monthlyData, tatMoyen });
   };
 
   const getFilteredData = () => {
@@ -143,7 +134,10 @@ export default function ReportsPage() {
     return stats.monthlyData;
   };
 
-  const maxCount = Math.max(...stats.monthlyData.map((d) => d.count), 1);
+  const dataVolumeMensuel = getFilteredData().map((item) => ({
+    month: item.month,
+    count: item.count,
+  }));
 
   const weeklyRequests = requests
     .filter((req) => isDateInWeek(req.createdAt, weekStart))
@@ -164,7 +158,6 @@ export default function ReportsPage() {
     weeklyAvgDelay = totalDays / weeklyValidated.length;
   }
   const weeklyDailyVolume = getDailyVolumeForWeek(weeklyRequests, weekStart);
-  const weeklyMaxCount = Math.max(...weeklyDailyVolume.map((d) => d.count), 1);
 
   const dataParType = Object.entries(stats.byType).map(([type, count]) => ({
     type: getTypeLabel(type),
@@ -212,6 +205,7 @@ export default function ReportsPage() {
     period: period as ReportPdfData['period'],
     periodLabel: weeklyOnly ? `Semaine du ${formatWeekLabel(weekStart)}` : getPeriodLabel(),
     stats,
+    filteredMonthlyData: getFilteredData(),
     weekly: {
       weekLabel: formatWeekLabel(weekStart),
       total: weeklyRequests.length,
@@ -310,21 +304,23 @@ export default function ReportsPage() {
           </div>
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-8">
-            <h3 className="font-bold mb-4">Volume d'examens mensuels</h3>
-            <div className="flex items-end justify-between gap-3 h-48">
-              {getFilteredData().map((item, idx) => (
-                <div key={idx} className="flex-1 flex flex-col items-center gap-2">
-                  <div className="w-full bg-primary/30 rounded-t-lg relative group" style={{ height: `${(item.count / maxCount) * 100}%`, minHeight: '8px' }}>
-                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-primary opacity-0 group-hover:opacity-100 transition-opacity">{item.count}</span>
-                  </div>
-                  <span className="text-xs font-medium text-slate-500">{item.month}</span>
-                </div>
-              ))}
-            </div>
+            <h3 className="font-bold mb-4">Volume d&apos;examens mensuels</h3>
+            {dataVolumeMensuel.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={dataVolumeMensuel}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#00478d" radius={[6, 6, 0, 0]} name="Examens" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-sm text-slate-400 text-center py-12">Aucune donnée pour cette période</p>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-8">
               <h3 className="font-bold mb-4">Répartition par type d&apos;examen</h3>
 
               <div className="flex flex-wrap gap-2 mb-4">
@@ -396,19 +392,6 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20">
-              <h3 className="font-bold mb-4">Top diagnostics CIM-10</h3>
-              <div className="space-y-3">
-                {stats.topDiagnostics.map((diag, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-3 bg-[#f2f3fb] rounded-lg">
-                    <div><span className="font-mono text-xs font-bold text-primary">{diag.code}</span><p className="text-xs text-slate-600 mt-0.5">{diag.name}</p></div>
-                    <span className="text-xl font-extrabold text-primary">{diag.count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
           <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant/20 mb-8">
             <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
               <div>
@@ -452,23 +435,21 @@ export default function ReportsPage() {
             </div>
 
             <h4 className="font-semibold mb-3 text-sm">Volume par jour</h4>
-            <div className="flex items-end justify-between gap-2 h-40 mb-6">
-              {weeklyDailyVolume.map((item) => (
-                <div key={item.day} className="flex-1 flex flex-col items-center gap-2">
-                  <div
-                    className="w-full bg-primary/30 rounded-t-lg relative group"
-                    style={{ height: `${(item.count / weeklyMaxCount) * 100}%`, minHeight: '8px' }}
-                  >
-                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                      {item.count}
-                    </span>
-                  </div>
-                  <span className="text-xs font-medium text-slate-500">{item.day}</span>
-                </div>
-              ))}
-            </div>
+            {dataParJour.length > 0 ? (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={dataParJour}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="jour" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#2563eb" radius={[4, 4, 0, 0]} name="Examens" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-sm text-slate-400 text-center py-8">Aucune donnée</p>
+            )}
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto mt-6">
               <table className="w-full text-sm">
                 <thead className="bg-[#f2f3fb] text-[11px] font-bold text-slate-500 uppercase">
                   <tr>

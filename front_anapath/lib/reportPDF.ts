@@ -1,7 +1,6 @@
 import { formatDate, formatDateTime } from './dateFormat';
 import { getTypeLabel } from './generatePDF';
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import { escapeHtml, renderHtmlToPdf } from './pdfUtils';
 
 export interface ReportPdfRequestRow {
   anapathId: string;
@@ -22,7 +21,6 @@ export interface ReportPdfData {
     byType: Record<string, number>;
     byStatus: Record<string, number>;
     monthlyData: { month: string; count: number }[];
-    topDiagnostics: { code: string; name: string; count: number }[];
     tatMoyen: number;
   };
   weekly: {
@@ -36,22 +34,7 @@ export interface ReportPdfData {
   };
   allRequests: ReportPdfRequestRow[];
   weeklyOnly?: boolean;
-}
-
-const REPORT_PDF_OPTIONS = {
-  margin: 10,
-  image: { type: 'jpeg', quality: 0.98 },
-  html2canvas: { scale: 2, useCORS: true, logging: false },
-  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-};
-
-function escapeHtml(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  filteredMonthlyData?: { month: string; count: number }[];
 }
 
 const DAY_FULL_NAMES: Record<string, string> = {
@@ -64,55 +47,52 @@ const DAY_FULL_NAMES: Record<string, string> = {
   Dim: 'Dimanche',
 };
 
-function tableHtml(headers: string[], rows: string[][], striped = false): string {
+function tableHtml(headers: string[], rows: string[][]): string {
   const head = headers
-    .map(
-      (h) =>
-        `<th style="padding:6px 8px;text-align:left;background:#00478d;color:#fff;font-size:10px;">${escapeHtml(h)}</th>`,
-    )
+    .map((h) => `<th>${escapeHtml(h)}</th>`)
     .join('');
   const body = rows
-    .map(
-      (row, i) =>
-        `<tr style="background:${striped && i % 2 ? '#f8fafc' : '#fff'};">${row
-          .map(
-            (cell) =>
-              `<td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;">${escapeHtml(cell)}</td>`,
-          )
-          .join('')}</tr>`,
-    )
+    .map((row) => `<tr>${row.map((c) => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`)
     .join('');
-  return `<table style="width:100%;border-collapse:collapse;margin:8px 0;">${head ? `<thead><tr>${head}</tr></thead>` : ''}<tbody>${body}</tbody></table>`;
-}
-
-function reportSection(title: string, content: string, pageBreak = false): string {
-  return `
-    <div style="${pageBreak ? 'page-break-before:always;' : ''}padding:8px 0;">
-      <h3 style="color:#00478d;font-size:13px;margin:0 0 10px;border-bottom:2px solid #00478d;padding-bottom:4px;">${escapeHtml(title)}</h3>
-      ${content}
-    </div>`;
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
 function buildReportHtml(data: ReportPdfData): string {
-  const { stats, weekly, allRequests, periodLabel, weeklyOnly } = data;
+  const { stats, weekly, allRequests, periodLabel, weeklyOnly, filteredMonthlyData } = data;
   const generatedAt = formatDateTime(new Date());
+  const monthlyRows = (filteredMonthlyData ?? stats.monthlyData).map(
+    (m) => [m.month, `${m.count}`],
+  );
 
   if (weeklyOnly) {
-    return `
-      <div style="width:794px;font-family:Arial,sans-serif;color:#000;padding:8px;">
-        <div style="text-align:center;margin-bottom:20px;">
-          <div style="font-weight:bold;font-size:16px;color:#00478d;">SERVICE D'ANATOMIE PATHOLOGIQUE – CHU Andrainjato</div>
-          <div style="font-size:14px;margin-top:6px;">RAPPORT HEBDOMADAIRE</div>
-          <div style="font-size:11px;color:#555;margin-top:6px;">Semaine du ${escapeHtml(weekly.weekLabel)}</div>
-        </div>
-        ${reportSection('KPIs hebdomadaires', tableHtml(['Total', 'Validés', 'En attente', 'Délai moyen'], [[`${weekly.total}`, `${weekly.validated}`, `${weekly.pending}`, `${weekly.avgDelay.toFixed(1)} j`]]))}
-        ${reportSection('Volume par jour', tableHtml(['Jour', "Nombre d'examens"], weekly.dailyVolume.map((d) => [DAY_FULL_NAMES[d.day] || d.day, `${d.count}`])))}
-        ${reportSection('Examens de la semaine', tableHtml(['ID PARA', 'Patient', 'Type', 'Statut', 'Prescripteur', 'Date'], weekly.requests.map((r) => [r.anapathId, r.patientId, r.typeLabel, r.statutLabel, r.prescriber, formatDate(r.createdAt)])))}
-        <div style="margin-top:24px;font-size:9px;color:#666;text-align:center;">
-          Document généré le ${escapeHtml(generatedAt)}<br/>
-          Service d'Anatomie Pathologique – CHU Andrainjato
-        </div>
-      </div>`;
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<style>
+body{font-family:'Times New Roman',Times,serif;font-size:11px;color:#000;width:794px;background:white;}
+.page{width:794px;padding:12px;}
+h1{font-size:16px;text-align:center;} h2{font-size:12px;text-align:center;color:#555;font-weight:normal;margin-bottom:16px;}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:10px;}
+th,td{border:1px solid #ccc;padding:5px 8px;text-align:left;}
+th{background:#e8edf5;font-weight:bold;}
+.section{background:#1a3a5c;color:white;padding:4px 8px;font-weight:bold;margin:14px 0 6px;font-size:12px;}
+.kpi{display:flex;justify-content:space-around;border:1px solid #ccc;padding:10px;margin-bottom:14px;}
+.kpi div{text-align:center;} .kpi .v{font-size:20px;font-weight:bold;color:#00478d;}
+.kpi .l{font-size:9px;color:#666;text-transform:uppercase;}
+.footer{margin-top:20px;font-size:8px;color:#666;text-align:center;border-top:1px solid #ccc;padding-top:6px;}
+</style></head><body><div class="page">
+<h1>RAPPORT HEBDOMADAIRE D'ACTIVITÉ</h1>
+<h2>Semaine du ${escapeHtml(weekly.weekLabel)}</h2>
+<div class="kpi">
+  <div><div class="v">${weekly.total}</div><div class="l">Total</div></div>
+  <div><div class="v">${weekly.validated}</div><div class="l">Validés</div></div>
+  <div><div class="v">${weekly.pending}</div><div class="l">En attente</div></div>
+  <div><div class="v">${weekly.avgDelay.toFixed(1)} j</div><div class="l">Délai moyen</div></div>
+</div>
+<div class="section">Volume par jour</div>
+${tableHtml(['Jour', "Nombre d'examens"], weekly.dailyVolume.map((d) => [DAY_FULL_NAMES[d.day] || d.day, `${d.count}`]))}
+<div class="section">Examens de la semaine</div>
+${tableHtml(['ID PARA', 'Patient', 'Type', 'Statut', 'Prescripteur', 'Date'], weekly.requests.map((r) => [r.anapathId, r.patientId, r.typeLabel, r.statutLabel, r.prescriber, formatDate(r.createdAt)]))}
+<div class="footer">Document généré le ${escapeHtml(generatedAt)} — Service d'Anatomie Pathologique — CHU Andrainjato</div>
+</div></body></html>`;
   }
 
   const typeRows = Object.entries(stats.byType).map(([type, count]) => {
@@ -121,96 +101,56 @@ function buildReportHtml(data: ReportPdfData): string {
   });
 
   const pending =
-    (stats.byStatus['CREEE'] || 0) +
-    (stats.byStatus['EN_ATTENTE'] || 0) +
-    (stats.byStatus['EN_COURS'] || 0);
+    (stats.byStatus['CREEE'] || 0)
+    + (stats.byStatus['EN_ATTENTE'] || 0)
+    + (stats.byStatus['EN_COURS'] || 0);
 
-  return `
-    <div style="width:794px;font-family:Arial,sans-serif;color:#000;padding:8px;">
-      <div style="text-align:center;margin-bottom:20px;">
-        <div style="font-weight:bold;font-size:16px;color:#00478d;">SERVICE D'ANATOMIE PATHOLOGIQUE – CHU Andrainjato</div>
-        <div style="font-size:14px;margin-top:6px;">RAPPORT D'ACTIVITÉ</div>
-        <div style="font-size:11px;color:#555;margin-top:6px;">${escapeHtml(periodLabel)}</div>
-      </div>
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<style>
+body{font-family:'Times New Roman',Times,serif;font-size:11px;color:#000;width:794px;background:white;}
+.page{width:794px;padding:12px;}
+h1{font-size:16px;text-align:center;color:#00478d;} h2{font-size:12px;text-align:center;color:#555;font-weight:normal;margin-bottom:16px;}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:10px;}
+th,td{border:1px solid #ccc;padding:5px 8px;text-align:left;}
+th{background:#e8edf5;font-weight:bold;}
+.section{background:#1a3a5c;color:white;padding:4px 8px;font-weight:bold;margin:14px 0 6px;font-size:12px;}
+.kpi{display:flex;justify-content:space-around;border:1px solid #ccc;padding:10px;margin-bottom:14px;}
+.kpi div{text-align:center;} .kpi .v{font-size:20px;font-weight:bold;color:#00478d;}
+.kpi .l{font-size:9px;color:#666;text-transform:uppercase;}
+.footer{margin-top:20px;font-size:8px;color:#666;text-align:center;border-top:1px solid #ccc;padding-top:6px;}
+</style></head><body><div class="page">
+<h1>RAPPORT D'ACTIVITÉ — SERVICE D'ANATOMIE PATHOLOGIQUE</h1>
+<h2>${escapeHtml(periodLabel)}</h2>
 
-      ${reportSection('SECTION 1 — KPIs globaux', tableHtml(['Total examens', 'Validés', 'En attente', 'Délai moyen (TAT)'], [[`${stats.total}`, `${stats.byStatus['VALIDE'] || 0}`, `${pending}`, `${stats.tatMoyen.toFixed(1)} j`]]))}
+<div class="section">Indicateurs clés</div>
+<div class="kpi">
+  <div><div class="v">${stats.total}</div><div class="l">Total examens</div></div>
+  <div><div class="v">${stats.byStatus['VALIDE'] || 0}</div><div class="l">Validés</div></div>
+  <div><div class="v">${pending}</div><div class="l">En attente</div></div>
+  <div><div class="v">${stats.tatMoyen.toFixed(1)} j</div><div class="l">Délai moyen</div></div>
+</div>
 
-      ${reportSection('SECTION 2 — Volume mensuel', tableHtml(['Mois', "Nombre d'examens"], stats.monthlyData.map((m) => [m.month, `${m.count}`])), true)}
+<div class="section">Volume mensuel</div>
+${tableHtml(['Mois', "Nombre d'examens"], monthlyRows)}
 
-      ${reportSection('SECTION 3 — Répartition par type', tableHtml(["Type d'examen", 'Nombre', 'Pourcentage'], typeRows), true)}
+<div class="section">Répartition par type d'examen</div>
+${tableHtml(["Type d'examen", 'Nombre', 'Pourcentage'], typeRows)}
 
-      ${reportSection('SECTION 4 — Top diagnostics CIM-10', tableHtml(['Code CIM-10', 'Libellé', 'Occurrences'], stats.topDiagnostics.map((d) => [d.code, d.name, `${d.count}`])), true)}
+<div class="section">Rapport hebdomadaire — ${escapeHtml(weekly.weekLabel)}</div>
+<div class="kpi">
+  <div><div class="v">${weekly.total}</div><div class="l">Total</div></div>
+  <div><div class="v">${weekly.validated}</div><div class="l">Validés</div></div>
+  <div><div class="v">${weekly.pending}</div><div class="l">En attente</div></div>
+  <div><div class="v">${weekly.avgDelay.toFixed(1)} j</div><div class="l">Délai moyen</div></div>
+</div>
+${tableHtml(['Jour', "Nombre d'examens"], weekly.dailyVolume.map((d) => [DAY_FULL_NAMES[d.day] || d.day, `${d.count}`]))}
+${tableHtml(['ID PARA', 'Patient', 'Type', 'Statut', 'Prescripteur', 'Date'], weekly.requests.map((r) => [r.anapathId, r.patientId, r.typeLabel, r.statutLabel, r.prescriber, formatDate(r.createdAt)]))}
 
-      ${reportSection(
-        'SECTION 5 — RAPPORT HEBDOMADAIRE',
-        `
-        <p style="font-size:11px;color:#555;margin:0 0 10px;">Semaine du ${escapeHtml(weekly.weekLabel)}</p>
-        ${tableHtml(['Total', 'Validés', 'En attente', 'Délai moyen'], [[`${weekly.total}`, `${weekly.validated}`, `${weekly.pending}`, `${weekly.avgDelay.toFixed(1)} j`]])}
-        <p style="font-size:11px;font-weight:bold;margin:12px 0 6px;">Volume par jour</p>
-        ${tableHtml(['Jour', "Nombre d'examens"], weekly.dailyVolume.map((d) => [DAY_FULL_NAMES[d.day] || d.day, `${d.count}`]))}
-        <p style="font-size:11px;font-weight:bold;margin:12px 0 6px;">Liste des examens de la semaine</p>
-        ${tableHtml(['ID PARA', 'Patient', 'Type', 'Statut', 'Prescripteur', 'Date'], weekly.requests.map((r) => [r.anapathId, r.patientId, r.typeLabel, r.statutLabel, r.prescriber, formatDate(r.createdAt)]))}
-        `,
-        true,
-      )}
+<div class="section">Liste complète des demandes (${allRequests.length})</div>
+${tableHtml(['ID PARA', 'Patient', 'Type', 'Statut', 'Date'], allRequests.map((r) => [r.anapathId, r.patientId, r.typeLabel, r.statutLabel, formatDate(r.createdAt)]))}
 
-      ${reportSection(
-        'SECTION 6 — Liste complète des demandes',
-        tableHtml(
-          ['ID PARA', 'Patient', 'Type', 'Statut', 'Date'],
-          allRequests.map((r) => [r.anapathId, r.patientId, r.typeLabel, r.statutLabel, formatDate(r.createdAt)]),
-          true,
-        ),
-        true,
-      )}
-
-      <div style="margin-top:24px;font-size:9px;color:#666;text-align:center;">
-        Document généré le ${escapeHtml(generatedAt)}<br/>
-        Service d'Anatomie Pathologique – CHU Andrainjato
-      </div>
-    </div>`;
-}
-
-async function runHtml2Pdf(
-  html: string,
-  filename: string,
-  options: Record<string, unknown>,
-  withPageNumbers = false,
-): Promise<void> {
-  const html2pdf = (await import('html2pdf.js')).default;
-  const container = document.createElement('div');
-  container.innerHTML = html;
-  container.style.cssText = 'position:fixed;left:-9999px;top:0;background:white;';
-  document.body.appendChild(container);
-
-  const opt = { ...options, filename };
-
-  try {
-    await html2pdf()
-      .set(opt)
-      .from(container)
-      .toPdf()
-      .get('pdf')
-      .then((pdf: any) => {
-        if (!withPageNumbers) return pdf;
-        const total = pdf.internal.getNumberOfPages();
-        const generatedAt = formatDateTime(new Date());
-        for (let i = 1; i <= total; i++) {
-          pdf.setPage(i);
-          pdf.setFontSize(8);
-          pdf.setTextColor(100);
-          const pageH = pdf.internal.pageSize.getHeight();
-          const pageW = pdf.internal.pageSize.getWidth();
-          pdf.text(`Document généré le ${generatedAt}`, 10, pageH - 12);
-          pdf.text("Service d'Anatomie Pathologique – CHU Andrainjato", 10, pageH - 8);
-          pdf.text(`Page ${i} / ${total}`, pageW - 28, pageH - 10);
-        }
-        return pdf;
-      })
-      .save();
-  } finally {
-    document.body.removeChild(container);
-  }
+<div class="footer">Document généré le ${escapeHtml(generatedAt)} — CHU Andrainjato — Service d'Anatomie Pathologique</div>
+</div></body></html>`;
 }
 
 export async function generateReportPDF(data: ReportPdfData): Promise<void> {
@@ -219,5 +159,5 @@ export async function generateReportPDF(data: ReportPdfData): Promise<void> {
   const filename = data.weeklyOnly
     ? `Rapport-Hebdo-Anapath-${dateSlug}.pdf`
     : `Rapport-Anapath-${dateSlug}.pdf`;
-  await runHtml2Pdf(html, filename, { ...REPORT_PDF_OPTIONS, filename }, !data.weeklyOnly);
+  await renderHtmlToPdf(html, filename, 1600);
 }
