@@ -91,7 +91,7 @@ body{
 }
 .infos-patient{
   display:flex;justify-content:space-between;
-  align-items:flex-start;margin-bottom:12px;
+  align-items:flex-start;margin-bottom:12px;position:relative;
 }
 .infos-left{flex:1;padding-right:12px;}
 .infos-left p{font-size:11px;margin-bottom:5px;line-height:1.4;}
@@ -100,11 +100,14 @@ body{
   min-width:220px;padding-bottom:1px;
 }
 .prescripteur-box{font-size:11px;white-space:nowrap;padding-top:2px;}
+.ref-box{
+  width:90px;height:38px;border:1px solid #000;flex-shrink:0;
+}
 .body-cols{display:flex;gap:10px;align-items:stretch;}
 .col-left{
   width:36%;min-height:420px;
-  border:1px solid #888;
-  background:#b5b5b5;
+  border:1.5px solid #5a7d3a;
+  background:#c9c9c9;
   padding:8px 6px;
 }
 .col-left-title{
@@ -114,12 +117,10 @@ body{
   margin-bottom:8px;color:#222;
 }
 .col-right{width:64%;}
-.box-resultat,.box-conclusion{
-  border:1.5px solid #000;padding:8px 10px;margin-bottom:10px;
-  background:white;
+.box-resultat-conclusion{
+  border:1.5px solid #000;padding:8px 10px;
+  background:white;min-height:420px;
 }
-.box-resultat{min-height:220px;}
-.box-conclusion{min-height:110px;}
 .box-title{
   font-weight:bold;text-decoration:underline;
   font-size:11px;margin-bottom:6px;
@@ -127,6 +128,8 @@ body{
 .box-content{
   font-size:10.5px;white-space:pre-wrap;line-height:1.45;
 }
+.box-resultat-section{min-height:230px;margin-bottom:20px;}
+.box-conclusion-section{min-height:110px;}
 .footer-zone{margin-top:16px;display:flex;justify-content:flex-end;}
 .date-signature{text-align:right;width:280px;}
 .date-fait{font-size:10.5px;margin-bottom:28px;}
@@ -162,7 +165,10 @@ body{
       <p>Renseignement clinique : <span class="underline-field">${escapeHtml(String(renseignementClinique))}</span></p>
       <p>Suspicion diagnostique : <span class="underline-field">${escapeHtml(String(suspicionDiagnostique))}</span></p>
     </div>
-    <div class="prescripteur-box">Prescripteur : Dr ${escapeHtml(String(prescripteur))}</div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px;">
+      <div class="ref-box"></div>
+      <div class="prescripteur-box">Prescripteur : Dr ${escapeHtml(String(prescripteur))}</div>
+    </div>
   </div>
 
   <div class="body-cols">
@@ -175,13 +181,15 @@ body{
       ${personnelHTML}
     </div>
     <div class="col-right">
-      <div class="box-resultat">
-        <div class="box-title">RESULTAT :</div>
-        <div class="box-content">${escapeHtml(resultat)}</div>
-      </div>
-      <div class="box-conclusion">
-        <div class="box-title">CONCLUSION :</div>
-        <div class="box-content">${escapeHtml(conclusion)}</div>
+      <div class="box-resultat-conclusion">
+        <div class="box-resultat-section">
+          <div class="box-title">RESULTAT :</div>
+          <div class="box-content">${escapeHtml(resultat)}</div>
+        </div>
+        <div class="box-conclusion-section">
+          <div class="box-title">CONCLUSION :</div>
+          <div class="box-content">${escapeHtml(conclusion)}</div>
+        </div>
       </div>
     </div>
   </div>

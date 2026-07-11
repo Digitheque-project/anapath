@@ -1,16 +1,16 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import ThemeToggle from './ThemeToggle';
+import { useAuth } from './AuthProvider';
 
 export default function SettingsMenu() {
-  const router = useRouter();
+  const { logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const handleLogout = () => {
-    router.push('/login');
+    logout();
   };
 
   useEffect(() => {

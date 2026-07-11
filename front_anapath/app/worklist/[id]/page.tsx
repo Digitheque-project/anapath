@@ -7,7 +7,7 @@ import Sidebar from '@/components/Sidebar';
 import PatientIdentitySection, { PatientInfo } from '@/components/PatientIdentitySection';
 import axios from 'axios';
 import { formatDateLong } from '@/lib/dateFormat';
-import { getPatientForExamen } from '@/lib/api';
+import { getPatientForExamen, API_BASE } from '@/lib/api';
 import { statusLabels, statusColors } from '@/lib/statusLabels';
 
 interface AnapathRequest {
@@ -55,7 +55,7 @@ export default function WorklistDetailPage() {
     async function loadExamen() {
       setLoading(true);
       try {
-        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}`);
+        const response = await axios.get(`${API_BASE}/anapath/${id}`);
         setRequest(response.data);
       } catch (error) {
         console.error('Erreur:', error);
@@ -87,10 +87,10 @@ export default function WorklistDetailPage() {
       // Ne changer le statut que si l'examen est encore en "En attente de validation" (CREEE)
       // Sinon, on garde le statut actuel pour ne pas écraser un résultat déjà saisi.
       if (request.statut === 'CREEE') {
-        await axios.patch(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${request.id}`, {
+        await axios.patch(`${API_BASE}/anapath/${request.id}`, {
           statut: 'EN_ATTENTE',
         });
-        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}`);
+        const response = await axios.get(`${API_BASE}/anapath/${id}`);
         setRequest(response.data);
       }
       // Rediriger vers la page validation avec l'ID de l'examen

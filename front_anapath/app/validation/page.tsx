@@ -8,7 +8,7 @@ import PatientIdentitySection, { PatientInfo } from '@/components/PatientIdentit
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
 import { formatDateLong } from '@/lib/dateFormat';
-import { getPatientForExamen, marquerNotifLue } from '@/lib/api';
+import { getPatientForExamen, marquerNotifLue, API_BASE } from '@/lib/api';
 import { getTypeLabel } from '@/lib/generatePDF';
 
 interface AnapathRequest {
@@ -124,7 +124,7 @@ function ValidationPageContent() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath`);
+      const response = await axios.get(`${API_BASE}/anapath`);
       const pendingRequests = response.data.filter(
         (req: AnapathRequest) =>
           req.statut === 'CREEE' ||
@@ -165,7 +165,7 @@ function ValidationPageContent() {
 
   const loadRequest = async (id: string) => {
     try {
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}`);
+      const response = await axios.get(`${API_BASE}/anapath/${id}`);
       setSelectedRequest(response.data);
       populateFields(response.data);
     } catch (error) {
@@ -188,7 +188,7 @@ function ValidationPageContent() {
 
     try {
       setUpdating(true);
-      await axios.patch(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${selectedRequest.id}`, {
+      await axios.patch(`${API_BASE}/anapath/${selectedRequest.id}`, {
         resultatDetails: resultData.details,
         resultatConclusion: resultData.conclusion,
         statut: 'RESULTAT_DISPONIBLE',
@@ -199,7 +199,7 @@ function ValidationPageContent() {
 
       await fetchData();
       if (selectedRequest) {
-        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${selectedRequest.id}`);
+        const response = await axios.get(`${API_BASE}/anapath/${selectedRequest.id}`);
         setSelectedRequest(response.data);
         populateFields(response.data);
       }
@@ -246,7 +246,7 @@ function ValidationPageContent() {
         .map((b) => b.toString(16).padStart(2, '0'))
         .join('');
 
-      await axios.patch(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${selectedRequest.id}`, {
+      await axios.patch(`${API_BASE}/anapath/${selectedRequest.id}`, {
         resultatDetails: resultData.details,
         resultatConclusion: resultData.conclusion,
         signature: signature.signature,

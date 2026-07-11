@@ -6,6 +6,7 @@ import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
+import { API_BASE } from '@/lib/api';
 import { filterAndSortAnapathRequests } from '@/lib/searchAnapath';
 import { formatDate } from '@/lib/dateFormat';
 
@@ -41,7 +42,7 @@ export default function ArchivesPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath`);
+      const response = await axios.get(`${API_BASE}/anapath`);
       const validatedRequests = response.data.filter((req: AnapathRequest) => req.statut === 'VALIDE');
       setRequests(validatedRequests);
       setFilteredRequests(validatedRequests);

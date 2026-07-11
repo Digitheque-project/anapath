@@ -9,9 +9,7 @@ export const api = axios.create({
 
 export const ANAPATH_SERVICE_ID = '14a94274-db57-49e3-9375-1e642729b92b';
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (typeof window !== 'undefined' ? '/api' : 'https://anapath-backend-ar7u.onrender.com/api');
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export async function getExamen(id: string): Promise<any> {
   try {

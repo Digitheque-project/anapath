@@ -74,7 +74,7 @@ npm run dev
 
 📚 Documentation
 Swagger : https://anapath-backend-ar7u.onrender.com/api/docs
-Frontend : http://localhost:3000
+Frontend : http://localhost:3031
 
 📄 License
 MIT

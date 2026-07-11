@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const API_URL = 'http://localhost:3001/api/anapath';
+const API_URL = 'http://localhost:3334/api/anapath';
 
 const data = [
   {

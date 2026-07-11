@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { API_BASE } from '@/lib/api';
 
 interface ExtemporaneTimerProps {
   startTime: Date | string;
@@ -44,7 +45,7 @@ export default function ExtemporaneTimer({
   // Fonction pour envoyer la notification au backend (pour qu'elle apparaisse dans la cloche)
   const sendNotification = async () => {
     try {
-      const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/notifications`, {
+      const response = await axios.post(`${API_BASE}/notifications`, {
         type: 'STAT_ALERT',
         title: '🚨 ALERTE STAT',
         message: `Il reste 5 minutes pour l'examen ${anapathId || ''} - Patient ${patientId || ''}`,

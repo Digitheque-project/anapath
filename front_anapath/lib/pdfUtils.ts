@@ -5,62 +5,78 @@ export async function renderHtmlToPdf(
   filename: string,
   pageHeight = 1123,
 ): Promise<void> {
-  const html2pdf = (await import('html2pdf.js')).default;
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+    import('html2canvas-pro'),
+    import('jspdf'),
+  ]);
 
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = `
-    position: fixed;
-    left: 0;
+  // The content is rendered off-screen in the current document (not an
+  // iframe via document.write, and not visibility:hidden — html2canvas
+  // silently produces a blank/unstyled capture in both of those cases).
+  const styleMatch = htmlContent.match(/<style[^>]*>([\s\S]*?)<\/style>/);
+  const bodyMatch = htmlContent.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+  const css = (styleMatch?.[1] ?? '').replace(/\bbody\s*\{/g, '.pdf-export-root{');
+  const bodyHtml = bodyMatch?.[1] ?? htmlContent;
+
+  const styleEl = document.createElement('style');
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
+
+  const container = document.createElement('div');
+  container.className = 'pdf-export-root';
+  container.style.cssText = `
+    position: absolute;
+    left: -10000px;
     top: 0;
     width: 794px;
-    height: ${pageHeight}px;
-    border: none;
-    visibility: hidden;
-    z-index: 99999;
+    min-height: ${pageHeight}px;
   `;
-  document.body.appendChild(iframe);
+  container.innerHTML = bodyHtml;
+  document.body.appendChild(container);
 
   try {
-    const doc = iframe.contentDocument
-      ?? iframe.contentWindow?.document;
-    if (!doc) throw new Error('iframe indisponible');
-
-    doc.open();
-    doc.write(htmlContent);
-    doc.close();
-
-    await new Promise((r) => setTimeout(r, 1200));
-
-    const element = doc.body;
-    if (!element?.innerHTML?.trim()) {
+    if (!container.innerHTML.trim()) {
       throw new Error('Contenu PDF vide');
     }
 
-    await html2pdf()
-      .set({
-        margin: 10,
-        filename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          windowWidth: 794,
-          width: 794,
-        },
-        jsPDF: {
-          unit: 'mm',
-          format: 'a4',
-          orientation: 'portrait',
-        },
-      })
-      .from(element)
-      .save();
-
     await new Promise((r) => setTimeout(r, 300));
+
+    const canvas = await html2canvas(container, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      windowWidth: 794,
+      width: 794,
+    });
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.98);
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const margin = 10;
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pdfPageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth - margin * 2;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    const usableHeight = pdfPageHeight - margin * 2;
+
+    let heightLeft = imgHeight;
+    let position = margin;
+    pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+    heightLeft -= usableHeight;
+
+    while (heightLeft > 0) {
+      position = margin - (imgHeight - heightLeft);
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+      heightLeft -= usableHeight;
+    }
+
+    pdf.save(filename);
   } finally {
-    if (document.body.contains(iframe)) {
-      document.body.removeChild(iframe);
+    if (document.body.contains(container)) {
+      document.body.removeChild(container);
+    }
+    if (document.head.contains(styleEl)) {
+      document.head.removeChild(styleEl);
     }
   }
 }

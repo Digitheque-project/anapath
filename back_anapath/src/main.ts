@@ -17,9 +17,8 @@ async function bootstrap() {
   const corsOrigins = [
     ...new Set([
       ...configuredOrigins,
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      'http://localhost:3001',
+      'http://localhost:3031',
+      'http://127.0.0.1:3031',
     ]),
   ].filter(Boolean);
 
@@ -51,7 +50,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
   
-  const port = process.env.PORT || 3001;
+  const port = process.env.PORT || 3334;
   await app.listen(port);
 
   const chuClient = new ChuClient();

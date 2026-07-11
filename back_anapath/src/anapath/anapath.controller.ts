@@ -1,12 +1,15 @@
-import { Controller, Get, Patch, Param, Post, Put, Body, HttpCode, Header, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Post, Put, Body, HttpCode, Header, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
 import { AnapathService } from './anapath.service';
 import { UpdateAnapathDto } from './dto/update-anapath.dto';
 import { ValidateAnapathDto } from './dto/validate-anapath.dto';
-import { AnapathRequest } from './entities/anapath-request.entity';
+import { AnapathRequest, Statut } from './entities/anapath-request.entity';
 import { ChuClient } from '../common/clients/chu.client';
 import { AccueilClient } from '../common/clients/accueil.client';
 import { NotificationClient } from '../common/clients/notification.client';
+import { Permissions } from '../auth/decorators/permissions.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AuthenticatedUser } from '../auth/types/authenticated-user.interface';
 
 function sortNotifications(notifs: any[]): any[] {
   const urgencePriority: Record<string, number> = { STAT: 1, URGENTE: 2, NORMALE: 3 };
@@ -28,6 +31,7 @@ export class AnapathController {
     private readonly notificationClient: NotificationClient,
   ) {}
 
+  @Permissions('anapath:read')
   @Get()
   @ApiOperation({ summary: 'Lister toutes les demandes' })
   @ApiResponse({ status: 200, description: 'Liste des demandes', type: [AnapathRequest] })
@@ -36,6 +40,7 @@ export class AnapathController {
     return this.anapathService.findAll();
   }
 
+  @Permissions('anapath:read')
   @Get('chu')
   @ApiOperation({ summary: 'Lister tous les CHU' })
   @Header('Content-Type', 'application/json; charset=utf-8')
@@ -43,6 +48,7 @@ export class AnapathController {
     return this.chuClient.getAllChus();
   }
 
+  @Permissions('anapath:read')
   @Get('chu/:chuId/services')
   @ApiOperation({ summary: "Lister les services d'un CHU" })
   @ApiParam({ name: 'chuId', description: 'UUID du CHU' })
@@ -51,6 +57,7 @@ export class AnapathController {
     return this.chuClient.getServicesByChu(chuId);
   }
 
+  @Permissions('anapath:read')
   @Get('service/anapath')
   @ApiOperation({ summary: 'Infos du service Anatomie Pathologique' })
   @Header('Content-Type', 'application/json; charset=utf-8')
@@ -58,6 +65,7 @@ export class AnapathController {
     return this.chuClient.getAnapathServiceInfo();
   }
 
+  @Permissions('anapath:read')
   @Get('notifications')
   @ApiOperation({ summary: 'Notifications du service Anapath' })
   @Header('Content-Type', 'application/json; charset=utf-8')
@@ -122,6 +130,7 @@ export class AnapathController {
     }
   }
 
+  @Permissions('anapath:read')
   @Get('notifications/non-lues')
   @ApiOperation({ summary: 'Notifications non lues' })
   @Header('Content-Type', 'application/json; charset=utf-8')
@@ -144,6 +153,7 @@ export class AnapathController {
     }
   }
 
+  @Permissions('anapath:update')
   @Put('notifications/:id/lire')
   @ApiOperation({ summary: 'Marquer une notification comme lue' })
   @ApiParam({ name: 'id', description: 'UUID de la notification' })
@@ -162,6 +172,7 @@ export class AnapathController {
     }
   }
 
+  @Permissions('anapath:read')
   @Get(':id/patient')
   @ApiOperation({
     summary: 'Récupérer les infos patient depuis Accueil',
@@ -217,6 +228,7 @@ export class AnapathController {
     };
   }
 
+  @Permissions('anapath:read')
   @Get(':id')
   @ApiOperation({ summary: 'Obtenir une demande par son ID' })
   @ApiParam({ name: 'id', description: 'UUID de la demande' })
@@ -227,6 +239,7 @@ export class AnapathController {
     return this.anapathService.findOne(id);
   }
 
+  @Permissions('anapath:update')
   @Patch(':id/notification-lue')
   @ApiOperation({ summary: 'Marquer notif comme lue pour cet examen' })
   @Header('Content-Type', 'application/json; charset=utf-8')
@@ -279,16 +292,25 @@ export class AnapathController {
     return { success: true };
   }
 
+  @Permissions('anapath:update')
   @Patch(':id')
   @ApiOperation({ summary: 'Mettre à jour une demande (résultat, statut)' })
   @ApiParam({ name: 'id', description: 'UUID de la demande' })
   @ApiResponse({ status: 200, description: 'Demande mise à jour', type: AnapathRequest })
   @ApiResponse({ status: 404, description: 'Demande non trouvée' })
   @Header('Content-Type', 'application/json; charset=utf-8')
-  update(@Param('id') id: string, @Body() dto: UpdateAnapathDto) {
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateAnapathDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (dto.statut === Statut.ANNULEE && !user.permissions.includes('anapath:cancel')) {
+      throw new ForbiddenException('Permission refusée');
+    }
     return this.anapathService.update(id, dto);
   }
 
+  @Permissions('anapath:validate')
   @Post(':id/validate')
   @ApiOperation({ summary: 'Valider une demande avec signature numérique' })
   @ApiParam({ name: 'id', description: 'UUID de la demande' })

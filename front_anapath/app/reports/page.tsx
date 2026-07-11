@@ -5,6 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
+import { API_BASE } from '@/lib/api';
 import { formatDate } from '@/lib/dateFormat';
 import {
   getMondayOfWeek,
@@ -80,7 +81,7 @@ export default function ReportsPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath`);
+      const response = await axios.get(`${API_BASE}/anapath`);
       const data = response.data;
       setRequests(data);
       setFilteredRequests(data);

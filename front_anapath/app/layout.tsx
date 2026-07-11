@@ -3,6 +3,7 @@ import { Inter, Manrope } from "next/font/google";
 import "./globals.css";
 import ThemeProvider from '../components/ThemeProvider';
 import { SearchProvider } from '../components/SearchContext'; // ← ajout
+import { AuthProvider } from '../components/AuthProvider';
 
 const inter = Inter({ 
   subsets: ["latin"], 
@@ -48,10 +49,12 @@ export default function RootLayout({
         />
         <div className="fixed top-0 left-64 right-0 bottom-0 -z-20 bg-white/60 pointer-events-none" />
         <ThemeProvider>
-          <SearchProvider>  {/* ← ajout */}
-            <div className="grain-overlay"></div>
-            {children}
-          </SearchProvider>
+          <AuthProvider>
+            <SearchProvider>  {/* ← ajout */}
+              <div className="grain-overlay"></div>
+              {children}
+            </SearchProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

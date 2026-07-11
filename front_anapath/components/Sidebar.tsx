@@ -1,25 +1,30 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useAuth } from './AuthProvider';
 
 const navigation = [
   { name: 'Tableau de bord', href: '/dashboard', icon: 'dashboard' },
   { name: 'Fil de travail', href: '/worklist', icon: 'clinical_notes' },
   { name: 'Validation', href: '/validation', icon: 'fact_check' },
-  { name: 'Archives', href: '/archives', icon: 'inventory_2' },
-  { name: 'Rapports', href: '/reports', icon: 'analytics' },
+  { name: 'Archives', href: '/archives', icon: 'inventory_2', permission: 'anapath:archive:view' },
+  { name: 'Rapports', href: '/reports', icon: 'analytics', permission: 'anapath:report:export' },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
+  const { hasPermission, logout } = useAuth();
 
   const handleLogout = () => {
     if (confirm('Voulez-vous vous déconnecter ?')) {
-      router.push('/');
+      logout();
     }
   };
+
+  const visibleNavigation = navigation.filter(
+    (item) => !item.permission || hasPermission(item.permission),
+  );
 
   return (
     <aside
@@ -46,7 +51,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 px-4">
-        {navigation.map((item) => {
+        {visibleNavigation.map((item) => {
           const active = pathname === item.href;
           return (
             <Link

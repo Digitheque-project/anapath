@@ -7,7 +7,7 @@ import Sidebar from '@/components/Sidebar';
 import PatientIdentitySection, { PatientInfo } from '@/components/PatientIdentitySection';
 import axios from 'axios';
 import { formatDateLong, formatDateTime } from '@/lib/dateFormat';
-import { getPatientForExamen } from '@/lib/api';
+import { getPatientForExamen, API_BASE } from '@/lib/api';
 import { getTypeLabel } from '@/lib/generatePDF';
 import { statusLabels, statusColors } from '@/lib/statusLabels';
 
@@ -58,7 +58,7 @@ export default function ArchiveDetailPage() {
       setLoading(true);
       setPatientLoading(true);
       try {
-        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/anapath/${id}`);
+        const response = await axios.get(`${API_BASE}/anapath/${id}`);
         setRequest(response.data);
       } catch (error) {
         console.error('Erreur:', error);

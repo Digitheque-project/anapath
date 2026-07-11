@@ -25,6 +25,8 @@ import {
   isServiceNotificationPayload,
   mapServiceNotificationInbound,
 } from './map-service-notification';
+import { Public } from '../auth/decorators/public.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 
 @ApiTags('notifications')
 @Controller('notifications')
@@ -36,6 +38,7 @@ export class NotificationController {
     private notificationRepository: Repository<NotificationEntity>,
   ) {}
 
+  @Public()
   @Post()
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: false, transform: true }))
   @ApiOperation({
@@ -139,6 +142,7 @@ export class NotificationController {
     };
   }
 
+  @Permissions('anapath:read')
   @Get()
   @ApiOperation({ summary: 'Lister toutes les notifications' })
   @ApiResponse({ status: 200, description: 'Liste des notifications', type: [NotificationResponseDto] })
@@ -150,6 +154,7 @@ export class NotificationController {
     return notifications;
   }
 
+  @Permissions('anapath:read')
   @Get('unread/count')
   @ApiOperation({ summary: 'Compter les notifications non lues' })
   async getUnreadCount() {
@@ -157,6 +162,7 @@ export class NotificationController {
     return { count };
   }
 
+  @Permissions('anapath:update')
   @Patch('read-all')
   @ApiOperation({ summary: 'Marquer toutes les notifications comme lues' })
   async markAllAsRead() {
@@ -169,6 +175,7 @@ export class NotificationController {
     return { success: true };
   }
 
+  @Permissions('anapath:update')
   @Patch(':id/read')
   @ApiOperation({ summary: 'Marquer une notification comme lue' })
   async markAsRead(@Param('id') id: string) {
