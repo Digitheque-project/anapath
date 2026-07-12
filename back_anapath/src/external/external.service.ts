@@ -1,6 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { AnapathService } from '../anapath/anapath.service';
-import { CreatePrescriptionAnapathDto } from './dto/create-prescription-anapath.dto';
+import {
+  CreatePrescriptionAnapathDto,
+  DemandeExamenDto,
+} from './dto/create-prescription-anapath.dto';
 import { ChuClient } from '../common/clients/chu.client';
 import { AccueilClient } from '../common/clients/accueil.client';
 import { ExamenType } from '../anapath/entities/anapath-request.entity';
@@ -17,23 +20,25 @@ export class ExternalService {
     dto: CreatePrescriptionAnapathDto,
     serviceIdHeader?: string,
   ) {
-    const {
-      patientId,
-      prescripteurId,
-      urgence,
-      alertes,
-      typeExamen,
-      data,
-      chuId,
-      serviceId,
-    } = dto;
+    const { patientId, prescripteurId, urgence, alertes, chuId, lotId } = dto;
 
+    // Le service Prescription peut envoyer un examen (legacy: typeExamen/data)
+    // ou plusieurs (demandes[]). On normalise vers une liste, sans rien perdre.
+    const demandes = this.normalizeDemandes(dto);
+
+    // Source = service prescripteur ; Dest = service anapath. On accepte les
+    // deux noms + l'alias legacy `serviceId` pour ne perdre aucune référence.
+    const sourceServiceId = dto.serviceIdSource ?? dto.serviceId ?? null;
+    const destServiceId = dto.serviceIdDest ?? null;
+
+    // Enrichissements (patient / service / chu) : une seule fois pour toute la
+    // prescription, partagés par tous les examens du lot.
     const [patientResult, serviceResult, chuResult] = await Promise.allSettled([
       chuId
         ? this.accueilClient.getPatient(patientId, chuId)
         : Promise.resolve(null),
-      serviceId
-        ? this.chuClient.getService(serviceId)
+      sourceServiceId
+        ? this.chuClient.getService(sourceServiceId)
         : Promise.resolve(null),
       chuId
         ? this.chuClient.getChu(chuId)
@@ -63,40 +68,88 @@ export class ExternalService {
       priseEnChargeId: patient.priseEnChargeId ?? null,
     } : null;
 
-    const prelevement = this.mapPrelevement(typeExamen, data);
+    const receivedAt = new Date().toISOString();
+    const createdRequests: Awaited<
+      ReturnType<AnapathService['create']>
+    >[] = [];
 
-    const metadata: Record<string, unknown> = {
-      prescripteurId,
-      serviceId,
-      serviceNom: service?.name ?? 'Service inconnu',
-      chuId,
-      chuNom: chu?.name ?? 'CHU inconnu',
-      alertes: alertes ?? null,
-      urgence: urgence ?? 'NORMALE',
-      sourceService: 'prescription',
-      sourceServiceId: serviceIdHeader || serviceId,
-      receivedAt: new Date().toISOString(),
-    };
+    // Un AnapathRequest par examen ; le lotId les relie via prescriptionId.
+    for (const demande of demandes) {
+      const typeExamen = demande.typeExamen;
+      const data = demande.data ?? {};
+      const prelevement = this.mapPrelevement(typeExamen, data);
 
-    const request = await this.anapathService.create({
-      patientId,
-      episodeId: serviceId,
-      typeExamen: typeExamen as unknown as ExamenType,
-      isExtemporane: typeExamen === 'EXTEMPORANE_STAT',
-      patientInfo: patientInfo ?? undefined,
-      prelevement,
-      metadata,
-    });
+      const metadata: Record<string, unknown> = {
+        prescripteurId,
+        serviceId: sourceServiceId,
+        serviceIdSource: sourceServiceId,
+        serviceIdDest: destServiceId,
+        serviceNom: service?.name ?? 'Service inconnu',
+        chuId,
+        chuNom: chu?.name ?? 'CHU inconnu',
+        alertes: alertes ?? null,
+        urgence: urgence ?? 'NORMALE',
+        lotId: lotId ?? null,
+        sourceService: 'prescription',
+        sourceServiceId: serviceIdHeader || destServiceId || sourceServiceId,
+        receivedAt,
+      };
 
-    console.log(
-      `✅ Examen créé : ${request.anapathId}`,
-      `| Patient: ${patientInfo?.nom ?? patientId}`,
-      `| Type: ${typeExamen}`,
-      `| Urgence: ${urgence ?? 'NORMALE'}`,
-      `| Patient trouvé via Accueil: ${!!patient}`,
+      const request = await this.anapathService.create({
+        patientId,
+        episodeId: sourceServiceId ?? undefined,
+        prescriptionId: lotId ?? undefined,
+        typeExamen: typeExamen as unknown as ExamenType,
+        isExtemporane: typeExamen === 'EXTEMPORANE_STAT',
+        patientInfo: patientInfo ?? undefined,
+        prelevement,
+        metadata,
+      });
+
+      console.log(
+        `✅ Examen créé : ${request.anapathId}`,
+        `| Patient: ${patientInfo?.nom ?? patientId}`,
+        `| Type: ${typeExamen}`,
+        `| Urgence: ${urgence ?? 'NORMALE'}`,
+        lotId ? `| Lot: ${lotId}` : '',
+        `| Patient trouvé via Accueil: ${!!patient}`,
+      );
+
+      createdRequests.push(request);
+    }
+
+    // Rétrocompat : format legacy mono-examen -> on renvoie l'objet unique.
+    // Format groupé -> on renvoie le lot complet (aucun examen masqué).
+    const isGrouped = Array.isArray(dto.demandes) && dto.demandes.length > 0;
+    if (isGrouped) {
+      return {
+        lotId: lotId ?? null,
+        count: createdRequests.length,
+        requests: createdRequests,
+      };
+    }
+    return createdRequests[0];
+  }
+
+  /**
+   * Ramène l'entrée (mono ou multi-examens) à une liste non vide de demandes.
+   * `demandes[]` prime sur le couple racine `typeExamen`/`data`.
+   */
+  private normalizeDemandes(
+    dto: CreatePrescriptionAnapathDto,
+  ): DemandeExamenDto[] {
+    if (Array.isArray(dto.demandes) && dto.demandes.length > 0) {
+      return dto.demandes.map((d) => ({
+        typeExamen: d.typeExamen,
+        data: d.data ?? {},
+      }));
+    }
+    if (dto.typeExamen) {
+      return [{ typeExamen: dto.typeExamen, data: dto.data ?? {} }];
+    }
+    throw new BadRequestException(
+      'Au moins un examen est requis : fournissez `demandes[]` ou `typeExamen`.',
     );
-
-    return request;
   }
 
   private mapPrelevement(typeExamen: string, data: any = {}) {
