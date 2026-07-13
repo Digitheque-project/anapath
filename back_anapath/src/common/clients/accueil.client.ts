@@ -6,6 +6,17 @@ const ACCUEIL_BASE_URL =
 
 @Injectable()
 export class AccueilClient {
+  /**
+   * En-têtes des appels vers Accueil. Aujourd'hui l'API Accueil est ouverte
+   * (aucun token requis). Si `ACCUEIL_SERVICE_TOKEN` est défini, on l'envoie en
+   * Bearer pour rester compatible le jour où Accueil imposerait le JWT — sinon
+   * le comportement est strictement identique à aujourd'hui.
+   */
+  private buildHeaders(): Record<string, string> {
+    const token = process.env.ACCUEIL_SERVICE_TOKEN;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
   async getPatient(patientId: string, chuId: string): Promise<any | null> {
     if (!patientId || !chuId) {
       console.warn('getPatient: patientId et chuId requis', { patientId, chuId });
@@ -16,6 +27,7 @@ export class AccueilClient {
         + `${encodeURIComponent(patientId)}`
         + `?chuId=${encodeURIComponent(chuId)}`;
       const res = await fetch(url, {
+        headers: this.buildHeaders(),
         signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) {
@@ -36,6 +48,7 @@ export class AccueilClient {
       const url = `${ACCUEIL_BASE_URL}/accueil/patients`
         + `?chuId=${encodeURIComponent(chuId)}`;
       const res = await fetch(url, {
+        headers: this.buildHeaders(),
         signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) return [];

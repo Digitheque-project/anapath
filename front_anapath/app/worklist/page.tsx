@@ -22,6 +22,16 @@ interface AnapathRequest {
   prelevement?: { site: string; description: string };
   resultat?: { conclusion?: string; details?: string } | null;
   validatedByUserId?: string | null;
+  patientInfo?: { nomComplet?: string | null; nom?: string | null; prenom?: string | null } | null;
+}
+
+/** Nom affichable du patient : nom complet enrichi (Accueil), sinon nom+prénom, sinon tiret. */
+function patientDisplayName(req: { patientInfo?: { nomComplet?: string | null; nom?: string | null; prenom?: string | null } | null }): string {
+  const info = req.patientInfo;
+  const complet = info?.nomComplet?.trim();
+  if (complet) return complet;
+  const assemble = [info?.nom, info?.prenom].filter(Boolean).join(' ').trim();
+  return assemble || '—';
 }
 
 export default function WorklistPage() {
@@ -118,13 +128,14 @@ export default function WorklistPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-[#f2f3fb] text-[11px] font-bold text-slate-500 uppercase">
-                  <tr><th className="p-4 text-left">ID PARA</th><th className="p-4 text-left">Patient</th><th className="p-4 text-left">Type examen</th><th className="p-4 text-left">Prélèvement</th><th className="p-4 text-left">Statut</th><th className="p-4 text-left">Date</th><th className="p-4 text-center">Actions</th></tr>
+                  <tr><th className="p-4 text-left">ID PARA</th><th className="p-4 text-left">Patient</th><th className="p-4 text-left">ID Patient</th><th className="p-4 text-left">Type examen</th><th className="p-4 text-left">Prélèvement</th><th className="p-4 text-left">Statut</th><th className="p-4 text-left">Date</th><th className="p-4 text-center">Actions</th></tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/10">
                   {filteredRequests.map((req) => (
                     <tr key={req.id} className={`hover:bg-slate-50/80 transition-colors group ${req.isExtemporane ? 'bg-red-50' : ''}`}>
                       <td className="p-4 font-mono font-bold text-primary">{req.anapathId}</td>
-                      <td className="p-4 font-medium">{req.patientId}</td>
+                      <td className="p-4 font-medium">{patientDisplayName(req)}</td>
+                      <td className="p-4 font-mono text-xs text-slate-500">{req.patientId}</td>
                       <td className="p-4">
                         <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold inline-flex items-center gap-1">
                           {getTypeLabel(req.typeExamen)}

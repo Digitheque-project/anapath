@@ -56,6 +56,10 @@ export class ExternalService {
       : null;
 
     const patientInfo = patient ? {
+      // On conserve l'INTÉGRALITÉ de la fiche renvoyée par Accueil (aucun champ
+      // perdu, y compris les ajouts futurs), puis on garantit la présence des
+      // champs clés + quelques valeurs calculées pratiques pour l'UI.
+      ...patient,
       nom: patient.nom ?? '',
       prenom: patient.prenom ?? '',
       sexe: patient.sexe ?? null,
@@ -65,7 +69,10 @@ export class ExternalService {
       adresse: patient.adresse ?? null,
       telephone: patient.telephone ?? null,
       contactUrgence: patient.contactUrgence ?? null,
+      chuId: patient.chuId ?? chuId ?? null,
       priseEnChargeId: patient.priseEnChargeId ?? null,
+      nomComplet: this.accueilClient.buildNomComplet(patient),
+      age: this.accueilClient.calculateAge(patient.dateNaissance),
     } : null;
 
     const receivedAt = new Date().toISOString();
