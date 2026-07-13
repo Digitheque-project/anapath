@@ -237,7 +237,7 @@ export default function ArchiveDetailPage() {
               onClick={handleExportPDF}
               className="flex items-center gap-2 px-4 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors font-medium"
             >
-              📄 Exporter PDF
+              Exporter PDF
             </button>
           </div>
         </div>
