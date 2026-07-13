@@ -364,7 +364,7 @@ function ValidationPageContent() {
                   {filteredRequests.map((req: AnapathRequest) => (
                     <option key={req.id} value={req.id}>
                       {req.anapathId} - Patient: {req.patientId} - {getTypeLabel(req.typeExamen)}
-                      {req.isExtemporane && ' ⚠️ STAT'}
+                      {req.isExtemporane && ' STAT'}
                     </option>
                   ))}
                 </select>
