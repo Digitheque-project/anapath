@@ -509,7 +509,7 @@ function ValidationPageContent() {
                       }`}
                     >
                       <span className="material-symbols-outlined text-[18px]">save</span>
-                      {updating ? 'Sauvegarde...' : '💾 Sauvegarder le résultat'}
+                      {updating ? 'Sauvegarde...' : 'Sauvegarder le résultat'}
                     </button>
                   </div>
                 </div>
