@@ -316,6 +316,7 @@ function ValidationPageContent() {
       await generatePDF(
         {
           ...selectedRequest,
+          ippNumber,
           resultatDetails: resultData.details,
           resultatConclusion: resultData.conclusion,
           resultat: {

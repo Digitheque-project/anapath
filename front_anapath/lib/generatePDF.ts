@@ -48,6 +48,7 @@ export async function generatePDF(
   const signature = examen?.validatedBySignature ?? '';
   const numOrdre = examen?.validatedByUserId ?? '';
   const anapathId = examen?.anapathId ?? examen?.id ?? '—';
+  const ippNumber = examen?.ippNumber ?? '';
   const dateAujourdhui = new Date().toLocaleDateString('fr-FR', {
     day: 'numeric',
     month: 'long',
@@ -102,6 +103,8 @@ body{
 .prescripteur-box{font-size:11px;white-space:nowrap;padding-top:2px;}
 .ref-box{
   width:90px;height:38px;border:1px solid #000;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:bold;text-align:center;padding:2px;
 }
 .body-cols{display:flex;gap:10px;align-items:stretch;}
 .col-left{
@@ -166,7 +169,7 @@ body{
       <p>Suspicion diagnostique : <span class="underline-field">${escapeHtml(String(suspicionDiagnostique))}</span></p>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px;">
-      <div class="ref-box"></div>
+      <div class="ref-box">${escapeHtml(String(ippNumber))}</div>
       <div class="prescripteur-box">Prescripteur : Dr ${escapeHtml(String(prescripteur))}</div>
     </div>
   </div>
