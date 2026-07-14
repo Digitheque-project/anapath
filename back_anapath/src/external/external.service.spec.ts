@@ -17,7 +17,15 @@ function makeService() {
     getChu: jest.fn(async () => ({ name: 'CHU Test' })),
   };
   const accueilClient = {
-    getPatient: jest.fn(async () => ({ nom: 'RAKOTO', prenom: 'Jean' })),
+    getPatient: jest.fn(async () => ({
+      nom: 'RAKOTO',
+      prenom: 'Jean',
+      dateNaissance: '1990-01-01',
+    })),
+    buildNomComplet: jest.fn((p: any) =>
+      [p?.nom, p?.prenom].filter(Boolean).join(' '),
+    ),
+    calculateAge: jest.fn(() => 36),
   };
   const service = new ExternalService(
     anapathService as any,
@@ -111,5 +119,38 @@ describe('ExternalService.createFromPrescription', () => {
         prescripteurId: 'presc-3',
       } as any),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('accepte un payload Prescription complet (urgence omise + champs externe/saisie)', async () => {
+    const { service, anapathService } = makeService();
+
+    const result: any = await service.createFromPrescription({
+      patientId: 'CHU-2026-00004',
+      prescripteurId: 'presc-ext',
+      // urgence omise → défaut NORMALE (aligné swagger Prescription)
+      demandes: [
+        { typeExamen: 'LIQUIDE', data: { type_liquide: 'LCR', volume: 5 } },
+      ],
+      chuId: 'chu-1',
+      serviceIdSource: 'svc-source',
+      serviceIdDest: 'svc-anapath',
+      lotId: 'lot-xyz',
+      prescripteurExterne: true,
+      prescripteurNomManuel: 'Dupont',
+      prescripteurPrenomManuel: 'Jean',
+      prescripteurOnm: '12345',
+      saisiParUserId: 'user-uuid',
+      saisiParNom: 'Agent Accueil',
+    } as any);
+
+    expect(anapathService.create).toHaveBeenCalledTimes(1);
+    expect(result.count).toBe(1);
+    expect(result.requests[0].metadata.urgence).toBe('NORMALE');
+    expect(result.requests[0].metadata.prescripteurExterne).toBe(true);
+    expect(result.requests[0].metadata.prescripteurNomManuel).toBe('Dupont');
+    expect(result.requests[0].metadata.prescripteurPrenomManuel).toBe('Jean');
+    expect(result.requests[0].metadata.prescripteurOnm).toBe('12345');
+    expect(result.requests[0].metadata.saisiParUserId).toBe('user-uuid');
+    expect(result.requests[0].metadata.saisiParNom).toBe('Agent Accueil');
   });
 });

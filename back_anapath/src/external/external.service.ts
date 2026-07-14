@@ -100,6 +100,13 @@ export class ExternalService {
         sourceService: 'prescription',
         sourceServiceId: serviceIdHeader || destServiceId || sourceServiceId,
         receivedAt,
+        // Champs optionnels Prescription (audit / traçabilité)
+        prescripteurExterne: dto.prescripteurExterne ?? null,
+        prescripteurNomManuel: dto.prescripteurNomManuel ?? null,
+        prescripteurPrenomManuel: dto.prescripteurPrenomManuel ?? null,
+        prescripteurOnm: dto.prescripteurOnm ?? null,
+        saisiParUserId: dto.saisiParUserId ?? null,
+        saisiParNom: dto.saisiParNom ?? null,
       };
 
       const request = await this.anapathService.create({
