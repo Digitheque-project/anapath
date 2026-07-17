@@ -173,6 +173,10 @@ function getAnapathId(n: any): string {
     ?? '';
 }
 
+function getRequestUuid(n: any): string {
+  return n.enriched?.id ?? '';
+}
+
 function formatHeure(d: string): string {
   if (!d) return '';
   return new Date(d).toLocaleTimeString('fr-FR', {
@@ -289,9 +293,14 @@ export default function NotificationBell() {
     : 'bg-blue-600';
 
   const handleClick = async (n: any) => {
+    const uuid = getRequestUuid(n);
     const aid = getAnapathId(n);
     setOpen(false);
-    if (aid) {
+    if (uuid) {
+      // Passe par la page de détail : les étapes du workflow doivent être
+      // renseignées avant de pouvoir saisir le résultat.
+      router.push(`/worklist/${uuid}`);
+    } else if (aid) {
       router.push(`/validation?id=${aid}`);
     } else {
       router.push('/validation');

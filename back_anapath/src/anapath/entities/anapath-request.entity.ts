@@ -27,6 +27,31 @@ export enum Statut {
   ANNULEE = 'ANNULEE',
 }
 
+export enum EtapeCode {
+  RECEPTION = 'RECEPTION',
+  MACROSCOPIE = 'MACROSCOPIE',
+  INCLUSION = 'INCLUSION',
+  COUPE = 'COUPE',
+  COLORATION = 'COLORATION',
+  LECTURE = 'LECTURE',
+}
+
+export interface MaterielUtilise {
+  nom: string;
+  quantite: number;
+  unite?: string;
+}
+
+export interface EtapeWorkflow {
+  code: EtapeCode;
+  complete: boolean;
+  completedAt: string | null;
+  completedByUserId: string | null;
+  completedByNom: string | null;
+  materiels: MaterielUtilise[];
+  observations: string | null;
+}
+
 @Entity('anapath_requests')
 export class AnapathRequest {
   @PrimaryGeneratedColumn('uuid')
@@ -69,6 +94,9 @@ export class AnapathRequest {
 
   @Column({ type: 'jsonb', nullable: true })
   resultat: object;
+
+  @Column({ type: 'jsonb', nullable: true })
+  etapes: EtapeWorkflow[] | null;
 
   @Column({ type: 'text', nullable: true })
   resultatDetails: string;

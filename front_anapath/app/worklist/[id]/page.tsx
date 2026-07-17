@@ -5,10 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import PatientIdentitySection, { PatientInfo } from '@/components/PatientIdentitySection';
+import WorkflowStepsCard from '@/components/WorkflowStepsCard';
+import { useAuth } from '@/components/AuthProvider';
 import axios from 'axios';
 import { formatDateLong } from '@/lib/dateFormat';
 import { getPatientForExamen, API_BASE } from '@/lib/api';
 import { statusLabels, statusColors } from '@/lib/statusLabels';
+import { allEtapesComplete, hasAnyObservations, type EtapeWorkflow } from '@/lib/workflowSteps';
 
 interface AnapathRequest {
   id: string;
@@ -25,17 +28,18 @@ interface AnapathRequest {
   episodeId?: string | null;
   metadata?: Record<string, unknown> | null;
   patientInfo?: PatientInfo | null;
+  etapes?: EtapeWorkflow[] | null;
 }
 
-function extractValue(description: string | undefined, key: string): string {
-  if (!description) return '-';
+function extractValue(description: unknown, key: string): string {
+  if (typeof description !== 'string' || !description) return '-';
   const regex = new RegExp(`${key}:\\s*([^,]+)`);
   const match = description.match(regex);
   return match ? match[1].trim() : '-';
 }
 
-function formatMotif(description: string | undefined): string {
-  if (!description) return 'Non renseigné';
+function formatMotif(description: unknown): string {
+  if (typeof description !== 'string' || !description) return 'Non renseigné';
   const cleaned = description.replace(/(?:[A-Za-zÀ-ÖØ-öø-ÿ]+):\s*[^,]+(?:,\s*)?/g, '').trim();
   return cleaned || 'Non renseigné';
 }
@@ -45,25 +49,24 @@ export default function WorklistDetailPage() {
   const router = useRouter();
   const id = params.id as string;
 
+  const { hasPermission } = useAuth();
   const [request, setRequest] = useState<AnapathRequest | null>(null);
   const [patient, setPatient] = useState<PatientInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [patientLoading, setPatientLoading] = useState(true);
-  const [updating, setUpdating] = useState(false);
+
+  const loadExamen = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/anapath/${id}`);
+      setRequest(response.data);
+    } catch (error) {
+      console.error('Erreur:', error);
+    }
+  };
 
   useEffect(() => {
-    async function loadExamen() {
-      setLoading(true);
-      try {
-        const response = await axios.get(`${API_BASE}/anapath/${id}`);
-        setRequest(response.data);
-      } catch (error) {
-        console.error('Erreur:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadExamen();
+    setLoading(true);
+    loadExamen().finally(() => setLoading(false));
   }, [id]);
 
   useEffect(() => {
@@ -80,27 +83,9 @@ export default function WorklistDetailPage() {
       .finally(() => setPatientLoading(false));
   }, [request?.id, request?.patientInfo]);
 
-  const handleTakeCharge = async () => {
+  const handleSaisirResultat = () => {
     if (!request) return;
-    try {
-      setUpdating(true);
-      // Ne changer le statut que si l'examen est encore en "En attente de validation" (CREEE)
-      // Sinon, on garde le statut actuel pour ne pas écraser un résultat déjà saisi.
-      if (request.statut === 'CREEE') {
-        await axios.patch(`${API_BASE}/anapath/${request.id}`, {
-          statut: 'EN_ATTENTE',
-        });
-        const response = await axios.get(`${API_BASE}/anapath/${id}`);
-        setRequest(response.data);
-      }
-      // Rediriger vers la page validation avec l'ID de l'examen
-      router.push(`/validation?id=${request.id}`);
-    } catch (error) {
-      console.error('Erreur lors de la prise en charge:', error);
-      alert('Erreur lors de la prise en charge');
-    } finally {
-      setUpdating(false);
-    }
+    router.push(`/validation?id=${request.id}`);
   };
 
   if (loading) {
@@ -125,8 +110,8 @@ export default function WorklistDetailPage() {
     );
   }
 
-  // Le bouton "Prise en charge" est visible tant que l'examen n'est pas validé (Terminé)
-  const isTakeChargeVisible = request.statut !== 'VALIDE' && request.statut !== 'ARCHIVE';
+  // Les étapes du workflow et le bouton de saisie sont visibles tant que l'examen n'est pas validé (Terminé)
+  const isWorkflowVisible = request.statut !== 'VALIDE' && request.statut !== 'ARCHIVE';
 
   return (
     <div className="flex min-h-screen bg-transparent text-[#191c21]">
@@ -289,17 +274,36 @@ export default function WorklistDetailPage() {
             </div>
           </div>
 
-          {/* Bouton Prise en charge - visible tant que le statut n'est pas "Terminé" */}
-          {isTakeChargeVisible && (
-            <div className="flex justify-center mt-8">
+          {isWorkflowVisible && (
+            <WorkflowStepsCard
+              requestId={request.id}
+              etapes={request.etapes ?? null}
+              canEdit={hasPermission('anapath:update')}
+              canWriteObservations={hasPermission('anapath:observation:write')}
+              onUpdated={loadExamen}
+            />
+          )}
+
+          {isWorkflowVisible && allEtapesComplete(request.etapes) && (
+            <div className="flex flex-col items-center mt-8 gap-2">
               <button
-                onClick={handleTakeCharge}
-                disabled={updating}
-                className="px-8 py-3 bg-blue-600 text-white font-bold rounded-full shadow-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                onClick={handleSaisirResultat}
+                disabled={!hasAnyObservations(request.etapes)}
+                className={`px-8 py-3 font-bold rounded-full shadow-md flex items-center gap-2 transition-colors ${
+                  hasAnyObservations(request.etapes)
+                    ? 'bg-green-600 text-white hover:bg-green-700'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
               >
-                <span className="material-symbols-outlined">handshake</span>
-                {updating ? 'Traitement...' : 'Prise en charge'}
+                <span className="material-symbols-outlined">edit_note</span>
+                Saisir le résultat d'examen
               </button>
+              {!hasAnyObservations(request.etapes) && (
+                <p className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <span className="material-symbols-outlined text-sm">lock</span>
+                  Terminez l&apos;étape Observations pour pouvoir saisir le résultat.
+                </p>
+              )}
             </div>
           )}
         </div>

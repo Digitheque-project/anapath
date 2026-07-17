@@ -37,7 +37,15 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.variable} ${manrope.variable} font-body text-on-surface antialiased`}>
-        <div className="fixed top-0 left-64 right-0 bottom-0 -z-20 bg-white/60 pointer-events-none" />
+        <div
+          className="fixed inset-0 -z-20 pointer-events-none"
+          style={{
+            backgroundImage: `url('/assets/bg-lobby.jpg')`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        />
+        <div className="fixed inset-0 -z-20 bg-white/60 pointer-events-none" />
         <ThemeProvider>
           <AuthProvider>
             <SearchProvider>  {/* ← ajout */}

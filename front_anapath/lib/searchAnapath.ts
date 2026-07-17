@@ -1,3 +1,8 @@
+interface SearchableEtape {
+  observations?: string | null;
+  materiels?: { nom: string }[];
+}
+
 export interface AnapathSearchable {
   anapathId?: string;
   patientId?: string;
@@ -7,6 +12,7 @@ export interface AnapathSearchable {
   createdAt?: string;
   prelevement?: { site?: string; description?: string } | null;
   resultat?: { conclusion?: string; details?: string } | null;
+  etapes?: SearchableEtape[] | null;
 }
 
 function collectSearchableText(req: AnapathSearchable): string {
@@ -20,6 +26,9 @@ function collectSearchableText(req: AnapathSearchable): string {
     req.prelevement?.description,
     req.resultat?.conclusion,
     req.resultat?.details,
+    // Les observations dictées par le pathologiste et le matériel saisi par étape
+    // doivent être trouvables depuis la recherche, au même titre que les autres champs.
+    ...(req.etapes ?? []).flatMap((e) => [e.observations, ...(e.materiels ?? []).map((m) => m.nom)]),
   ];
   return parts.filter(Boolean).join(' ').toLowerCase();
 }

@@ -10,6 +10,8 @@ import axios from 'axios';
 import { formatDateLong } from '@/lib/dateFormat';
 import { getPatientForExamen, marquerNotifLue, API_BASE } from '@/lib/api';
 import { getTypeLabel } from '@/lib/generatePDF';
+import { allEtapesComplete, type EtapeWorkflow } from '@/lib/workflowSteps';
+import { sortByUrgencyThenArrival } from '@/lib/urgencySort';
 
 interface AnapathRequest {
   id: string;
@@ -32,6 +34,7 @@ interface AnapathRequest {
   episodeId?: string | null;
   metadata?: Record<string, unknown> | null;
   patientInfo?: PatientInfo | null;
+  etapes?: EtapeWorkflow[] | null;
 }
 
 function ValidationPageContent() {
@@ -125,17 +128,16 @@ function ValidationPageContent() {
     try {
       setLoading(true);
       const response = await axios.get(`${API_BASE}/anapath`);
-      const pendingRequests = response.data.filter(
+      // Seules les demandes dont les 6 étapes du workflow sont terminées peuvent
+      // passer à la saisie du résultat (voir fil de travail / WorkflowStepsCard).
+      const readyForValidation: AnapathRequest[] = response.data.filter(
         (req: AnapathRequest) =>
-          req.statut === 'CREEE' ||
-          req.statut === 'EN_ATTENTE' ||
-          req.statut === 'RESULTAT_DISPONIBLE'
+          (req.statut === 'CREEE' ||
+            req.statut === 'EN_ATTENTE' ||
+            req.statut === 'RESULTAT_DISPONIBLE') &&
+          allEtapesComplete(req.etapes),
       );
-      pendingRequests.sort((a: AnapathRequest, b: AnapathRequest) => {
-        if (a.isExtemporane && !b.isExtemporane) return -1;
-        if (!a.isExtemporane && b.isExtemporane) return 1;
-        return 0;
-      });
+      const pendingRequests = sortByUrgencyThenArrival<AnapathRequest>(readyForValidation);
       setRequests(pendingRequests);
       setFilteredRequests(pendingRequests);
 

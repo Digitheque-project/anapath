@@ -38,6 +38,16 @@ interface AnapathRequest {
   createdAt: string;
   validatedAt: string | null;
   episodeId?: string | null;
+  patientInfo?: { nomComplet?: string | null; nom?: string | null; prenom?: string | null } | null;
+}
+
+/** Nom affichable du patient : nom complet enrichi (Accueil), sinon nom+prénom, sinon tiret. */
+function patientDisplayName(req: { patientInfo?: { nomComplet?: string | null; nom?: string | null; prenom?: string | null } | null }): string {
+  const info = req.patientInfo;
+  const complet = info?.nomComplet?.trim();
+  if (complet) return complet;
+  const assemble = [info?.nom, info?.prenom].filter(Boolean).join(' ').trim();
+  return assemble || '—';
 }
 
 interface Statistics {
@@ -454,7 +464,7 @@ export default function ReportsPage() {
               <table className="w-full text-sm">
                 <thead className="bg-[#f2f3fb] text-[11px] font-bold text-slate-500 uppercase">
                   <tr>
-                    <th className="p-3 text-left">ID PARA</th>
+                    <th className="p-3 text-left">ID Patient</th>
                     <th className="p-3 text-left">Patient</th>
                     <th className="p-3 text-left">Type</th>
                     <th className="p-3 text-left">Statut</th>
@@ -464,8 +474,8 @@ export default function ReportsPage() {
                 <tbody className="divide-y divide-outline-variant/10">
                   {weeklyRequests.map((req) => (
                     <tr key={req.id} className="hover:bg-slate-50/80">
-                      <td className="p-3 font-mono font-bold text-primary">{req.anapathId}</td>
-                      <td className="p-3">{req.patientId}</td>
+                      <td className="p-3 font-mono text-xs text-slate-500">{req.patientId}</td>
+                      <td className="p-3 font-medium">{patientDisplayName(req)}</td>
                       <td className="p-3">{getTypeLabel(req.typeExamen)}</td>
                       <td className="p-3">{statusLabels[req.statut] || req.statut}</td>
                       <td className="p-3 text-slate-500">{formatDate(req.createdAt)}</td>

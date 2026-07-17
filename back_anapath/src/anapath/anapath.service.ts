@@ -2,11 +2,29 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
-import { AnapathRequest, Statut } from './entities/anapath-request.entity';
+import {
+  AnapathRequest,
+  Statut,
+  EtapeCode,
+  EtapeWorkflow,
+} from './entities/anapath-request.entity';
 import { CreateAnapathDto } from './dto/create-anapath.dto';
 import { UpdateAnapathDto } from './dto/update-anapath.dto';
 import { ValidateAnapathDto } from './dto/validate-anapath.dto';
+import { UpdateEtapeDto } from './dto/update-etape.dto';
+import { UpdateEtapeObservationDto } from './dto/update-etape-observation.dto';
+import { AuthenticatedUser } from '../auth/types/authenticated-user.interface';
 import * as crypto from 'crypto';
+
+const DEFAULT_ETAPES: EtapeWorkflow[] = Object.values(EtapeCode).map((code) => ({
+  code,
+  complete: false,
+  completedAt: null,
+  completedByUserId: null,
+  completedByNom: null,
+  materiels: [],
+  observations: null,
+}));
 
 export type AnapathRequestResponse = AnapathRequest & {
   resultat: { details: string | null; conclusion: string | null };
@@ -147,6 +165,108 @@ export class AnapathService {
     }
 
     this.syncResultatFields(request);
+
+    const saved = await this.anapathRepository.save(request);
+    return this.toResponse(saved);
+  }
+
+  private mergeEtape(
+    etapes: EtapeWorkflow[],
+    dto: UpdateEtapeDto,
+    user: AuthenticatedUser,
+  ): EtapeWorkflow[] {
+    const index = etapes.findIndex((e) => e.code === dto.code);
+    const current = index >= 0 ? etapes[index] : {
+      code: dto.code,
+      complete: false,
+      completedAt: null,
+      completedByUserId: null,
+      completedByNom: null,
+      materiels: [],
+      observations: null,
+    };
+
+    const updated: EtapeWorkflow = {
+      ...current,
+      complete: dto.complete,
+      completedAt: dto.complete ? new Date().toISOString() : null,
+      completedByUserId: dto.complete ? user.userId : null,
+      completedByNom: dto.complete ? `${user.firstname} ${user.name}`.trim() : null,
+      materiels: dto.materiels ?? current.materiels,
+    };
+
+    if (index >= 0) {
+      etapes[index] = updated;
+    } else {
+      etapes.push(updated);
+    }
+    return etapes;
+  }
+
+  private mergeEtapeObservation(
+    etapes: EtapeWorkflow[],
+    dto: UpdateEtapeObservationDto,
+  ): EtapeWorkflow[] {
+    const index = etapes.findIndex((e) => e.code === dto.code);
+    if (index >= 0) {
+      etapes[index] = { ...etapes[index], observations: dto.observations };
+    } else {
+      etapes.push({
+        code: dto.code,
+        complete: false,
+        completedAt: null,
+        completedByUserId: null,
+        completedByNom: null,
+        materiels: [],
+        observations: dto.observations,
+      });
+    }
+    return etapes;
+  }
+
+  async updateEtape(
+    id: string,
+    dto: UpdateEtapeDto,
+    user: AuthenticatedUser,
+  ): Promise<AnapathRequestResponse> {
+    const request = await this.findOneEntity(id);
+    const etapes = request.etapes?.length ? [...request.etapes] : [...DEFAULT_ETAPES];
+    request.etapes = this.mergeEtape(etapes, dto, user);
+
+    const saved = await this.anapathRepository.save(request);
+    return this.toResponse(saved);
+  }
+
+  async updateEtapesBulk(
+    id: string,
+    dtos: UpdateEtapeDto[],
+    user: AuthenticatedUser,
+  ): Promise<AnapathRequestResponse> {
+    const request = await this.findOneEntity(id);
+    let etapes = request.etapes?.length ? [...request.etapes] : [...DEFAULT_ETAPES];
+
+    for (const dto of dtos) {
+      etapes = this.mergeEtape(etapes, dto, user);
+    }
+
+    request.etapes = etapes;
+
+    const saved = await this.anapathRepository.save(request);
+    return this.toResponse(saved);
+  }
+
+  async updateEtapesObservations(
+    id: string,
+    dtos: UpdateEtapeObservationDto[],
+  ): Promise<AnapathRequestResponse> {
+    const request = await this.findOneEntity(id);
+    let etapes = request.etapes?.length ? [...request.etapes] : [...DEFAULT_ETAPES];
+
+    for (const dto of dtos) {
+      etapes = this.mergeEtapeObservation(etapes, dto);
+    }
+
+    request.etapes = etapes;
 
     const saved = await this.anapathRepository.save(request);
     return this.toResponse(saved);

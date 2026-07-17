@@ -3,6 +3,9 @@ import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/s
 import { AnapathService } from './anapath.service';
 import { UpdateAnapathDto } from './dto/update-anapath.dto';
 import { ValidateAnapathDto } from './dto/validate-anapath.dto';
+import { UpdateEtapeDto } from './dto/update-etape.dto';
+import { UpdateEtapesBulkDto } from './dto/update-etapes-bulk.dto';
+import { UpdateEtapesObservationsBulkDto } from './dto/update-etape-observation.dto';
 import { AnapathRequest, Statut } from './entities/anapath-request.entity';
 import { ChuClient } from '../common/clients/chu.client';
 import { AccueilClient } from '../common/clients/accueil.client';
@@ -98,6 +101,7 @@ export class AnapathController {
             return {
               ...n,
               enriched: {
+                id: examen.id,
                 anapathId: examen.anapathId,
                 typeExamen: examen.typeExamen,
                 statut: examen.statut,
@@ -308,6 +312,53 @@ export class AnapathController {
       throw new ForbiddenException('Permission refusée');
     }
     return this.anapathService.update(id, dto);
+  }
+
+  @Permissions('anapath:update')
+  @Patch(':id/etapes')
+  @ApiOperation({ summary: "Marquer une étape du workflow (avant saisie du résultat)" })
+  @ApiParam({ name: 'id', description: 'UUID de la demande' })
+  @ApiBody({ type: UpdateEtapeDto })
+  @ApiResponse({ status: 200, description: 'Étape mise à jour', type: AnapathRequest })
+  @ApiResponse({ status: 404, description: 'Demande non trouvée' })
+  @Header('Content-Type', 'application/json; charset=utf-8')
+  updateEtape(
+    @Param('id') id: string,
+    @Body() dto: UpdateEtapeDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.anapathService.updateEtape(id, dto, user);
+  }
+
+  @Permissions('anapath:update')
+  @Patch(':id/etapes/bulk')
+  @ApiOperation({ summary: 'Mettre à jour toutes les étapes du workflow en une seule fois' })
+  @ApiParam({ name: 'id', description: 'UUID de la demande' })
+  @ApiBody({ type: UpdateEtapesBulkDto })
+  @ApiResponse({ status: 200, description: 'Étapes mises à jour', type: AnapathRequest })
+  @ApiResponse({ status: 404, description: 'Demande non trouvée' })
+  @Header('Content-Type', 'application/json; charset=utf-8')
+  updateEtapesBulk(
+    @Param('id') id: string,
+    @Body() dto: UpdateEtapesBulkDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.anapathService.updateEtapesBulk(id, dto.etapes, user);
+  }
+
+  @Permissions('anapath:observation:write')
+  @Patch(':id/etapes/observations')
+  @ApiOperation({ summary: "Enregistrer les observations du pathologiste par étape" })
+  @ApiParam({ name: 'id', description: 'UUID de la demande' })
+  @ApiBody({ type: UpdateEtapesObservationsBulkDto })
+  @ApiResponse({ status: 200, description: 'Observations mises à jour', type: AnapathRequest })
+  @ApiResponse({ status: 404, description: 'Demande non trouvée' })
+  @Header('Content-Type', 'application/json; charset=utf-8')
+  updateEtapesObservations(
+    @Param('id') id: string,
+    @Body() dto: UpdateEtapesObservationsBulkDto,
+  ) {
+    return this.anapathService.updateEtapesObservations(id, dto.etapes);
   }
 
   @Permissions('anapath:validate')
