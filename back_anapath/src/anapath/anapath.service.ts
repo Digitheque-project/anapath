@@ -2,29 +2,14 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
-import {
-  AnapathRequest,
-  Statut,
-  EtapeCode,
-  EtapeWorkflow,
-} from './entities/anapath-request.entity';
+import { AnapathRequest, Statut } from './entities/anapath-request.entity';
+import { ReportSettings } from './entities/report-settings.entity';
 import { CreateAnapathDto } from './dto/create-anapath.dto';
 import { UpdateAnapathDto } from './dto/update-anapath.dto';
 import { ValidateAnapathDto } from './dto/validate-anapath.dto';
-import { UpdateEtapeDto } from './dto/update-etape.dto';
-import { UpdateEtapeObservationDto } from './dto/update-etape-observation.dto';
-import { AuthenticatedUser } from '../auth/types/authenticated-user.interface';
+import { UpdateResultatDto } from './dto/update-resultat.dto';
+import { UpdateExamenSpeculumDto } from './dto/update-examen-speculum.dto';
 import * as crypto from 'crypto';
-
-const DEFAULT_ETAPES: EtapeWorkflow[] = Object.values(EtapeCode).map((code) => ({
-  code,
-  complete: false,
-  completedAt: null,
-  completedByUserId: null,
-  completedByNom: null,
-  materiels: [],
-  observations: null,
-}));
 
 export type AnapathRequestResponse = AnapathRequest & {
   resultat: { details: string | null; conclusion: string | null };
@@ -36,6 +21,8 @@ export class AnapathService {
   constructor(
     @InjectRepository(AnapathRequest)
     private anapathRepository: Repository<AnapathRequest>,
+    @InjectRepository(ReportSettings)
+    private reportSettingsRepository: Repository<ReportSettings>,
   ) {}
 
   private generateAnapathId(): string {
@@ -94,8 +81,11 @@ export class AnapathService {
     return this.toResponse(saved);
   }
 
-  async findAll(): Promise<AnapathRequestResponse[]> {
-    const rows = await this.anapathRepository.find({ order: { createdAt: 'DESC' } });
+  async findAll(patientId?: string): Promise<AnapathRequestResponse[]> {
+    const rows = await this.anapathRepository.find({
+      where: patientId ? { patientId } : {},
+      order: { createdAt: 'DESC' },
+    });
     return rows.map((row) => this.toResponse(row));
   }
 
@@ -170,103 +160,38 @@ export class AnapathService {
     return this.toResponse(saved);
   }
 
-  private mergeEtape(
-    etapes: EtapeWorkflow[],
-    dto: UpdateEtapeDto,
-    user: AuthenticatedUser,
-  ): EtapeWorkflow[] {
-    const index = etapes.findIndex((e) => e.code === dto.code);
-    const current = index >= 0 ? etapes[index] : {
-      code: dto.code,
-      complete: false,
-      completedAt: null,
-      completedByUserId: null,
-      completedByNom: null,
-      materiels: [],
-      observations: null,
-    };
-
-    const updated: EtapeWorkflow = {
-      ...current,
-      complete: dto.complete,
-      completedAt: dto.complete ? new Date().toISOString() : null,
-      completedByUserId: dto.complete ? user.userId : null,
-      completedByNom: dto.complete ? `${user.firstname} ${user.name}`.trim() : null,
-      materiels: dto.materiels ?? current.materiels,
-    };
-
-    if (index >= 0) {
-      etapes[index] = updated;
-    } else {
-      etapes.push(updated);
-    }
-    return etapes;
-  }
-
-  private mergeEtapeObservation(
-    etapes: EtapeWorkflow[],
-    dto: UpdateEtapeObservationDto,
-  ): EtapeWorkflow[] {
-    const index = etapes.findIndex((e) => e.code === dto.code);
-    if (index >= 0) {
-      etapes[index] = { ...etapes[index], observations: dto.observations };
-    } else {
-      etapes.push({
-        code: dto.code,
-        complete: false,
-        completedAt: null,
-        completedByUserId: null,
-        completedByNom: null,
-        materiels: [],
-        observations: dto.observations,
-      });
-    }
-    return etapes;
-  }
-
-  async updateEtape(
-    id: string,
-    dto: UpdateEtapeDto,
-    user: AuthenticatedUser,
-  ): Promise<AnapathRequestResponse> {
+  /**
+   * Sauvegarde (auto-save) du résultat/conclusion uniquement — utilisé pour la
+   * transcription en direct (ex: Secrétaire qui tape ce que dicte le
+   * pathologiste). Ne touche ni au statut de validation finale, ni à la
+   * signature, ni à l'annulation : ces actions restent derrière anapath:update
+   * / anapath:validate.
+   */
+  async updateResultat(id: string, dto: UpdateResultatDto): Promise<AnapathRequestResponse> {
     const request = await this.findOneEntity(id);
-    const etapes = request.etapes?.length ? [...request.etapes] : [...DEFAULT_ETAPES];
-    request.etapes = this.mergeEtape(etapes, dto, user);
+
+    if (dto.resultatDetails !== undefined) request.resultatDetails = dto.resultatDetails;
+    if (dto.resultatConclusion !== undefined) request.resultatConclusion = dto.resultatConclusion;
+
+    const hasContent =
+      (request.resultatDetails ?? '').trim() !== '' || (request.resultatConclusion ?? '').trim() !== '';
+    if (hasContent && request.statut !== Statut.VALIDE && request.statut !== Statut.ARCHIVE) {
+      request.statut = Statut.RESULTAT_DISPONIBLE;
+    }
+
+    this.syncResultatFields(request);
 
     const saved = await this.anapathRepository.save(request);
     return this.toResponse(saved);
   }
 
-  async updateEtapesBulk(
+  /** Enregistre l'examen au spéculum (préalable obligatoire au résultat pour un FCV/Pap test). */
+  async updateExamenSpeculum(
     id: string,
-    dtos: UpdateEtapeDto[],
-    user: AuthenticatedUser,
+    dto: UpdateExamenSpeculumDto,
   ): Promise<AnapathRequestResponse> {
     const request = await this.findOneEntity(id);
-    let etapes = request.etapes?.length ? [...request.etapes] : [...DEFAULT_ETAPES];
-
-    for (const dto of dtos) {
-      etapes = this.mergeEtape(etapes, dto, user);
-    }
-
-    request.etapes = etapes;
-
-    const saved = await this.anapathRepository.save(request);
-    return this.toResponse(saved);
-  }
-
-  async updateEtapesObservations(
-    id: string,
-    dtos: UpdateEtapeObservationDto[],
-  ): Promise<AnapathRequestResponse> {
-    const request = await this.findOneEntity(id);
-    let etapes = request.etapes?.length ? [...request.etapes] : [...DEFAULT_ETAPES];
-
-    for (const dto of dtos) {
-      etapes = this.mergeEtapeObservation(etapes, dto);
-    }
-
-    request.etapes = etapes;
+    request.examenSpeculum = { ...dto, submittedAt: new Date().toISOString() };
 
     const saved = await this.anapathRepository.save(request);
     return this.toResponse(saved);
@@ -305,6 +230,59 @@ export class AnapathService {
 
     const saved = await this.anapathRepository.save(request);
     return this.toResponse(saved);
+  }
+
+  /** Récupère (et crée si absente) la ligne unique de préférences des rapports. */
+  async getReportSettings(): Promise<ReportSettings> {
+    const existing = await this.reportSettingsRepository.findOne({ where: { id: 'default' } });
+    if (existing) return existing;
+    return this.reportSettingsRepository.save(
+      this.reportSettingsRepository.create({ id: 'default', autoWeeklyReportEnabled: false }),
+    );
+  }
+
+  async updateReportSettings(autoWeeklyReportEnabled: boolean): Promise<ReportSettings> {
+    const settings = await this.getReportSettings();
+    settings.autoWeeklyReportEnabled = autoWeeklyReportEnabled;
+    return this.reportSettingsRepository.save(settings);
+  }
+
+  /**
+   * Chaque vendredi à 18h : si activé, notifie le service qu'un rapport
+   * hebdomadaire est prêt à être consulté/exporté (la génération du PDF
+   * elle-même reste côté navigateur, cf. page Rapports).
+   */
+  @Cron('0 18 * * 5')
+  async notifierRapportHebdomadaireAutomatique() {
+    const settings = await this.getReportSettings();
+    if (!settings.autoWeeklyReportEnabled) return;
+
+    const base =
+      process.env.NOTIF_SERVICE_URL ??
+      'https://prescription-back-7m7a.onrender.com';
+    const svcId =
+      process.env.ANAPATH_SERVICE_ID ??
+      '14a94274-db57-49e3-9375-1e642729b92b';
+
+    try {
+      await fetch(`${base}/notifications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          destinataire: svcId,
+          service: svcId,
+          titre: 'Rapport hebdomadaire disponible',
+          message:
+            "Le rapport hebdomadaire d'activité du service est prêt — ouvrez la page Rapports pour le consulter et l'exporter en PDF.",
+          type: 'RAPPORT_HEBDOMADAIRE',
+          urgence: 'NORMALE',
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+      console.log('✅ Notification rapport hebdomadaire envoyée');
+    } catch (e) {
+      console.warn('Notification rapport hebdomadaire échouée:', e);
+    }
   }
 
   @Cron('0 8 * * *')

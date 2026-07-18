@@ -1,7 +1,14 @@
-interface SearchableEtape {
-  observations?: string | null;
-  materiels?: { nom: string }[];
-}
+import { statusLabels } from './statusLabels';
+
+const TYPE_LABELS: Record<string, string> = {
+  BIOPSIE: 'Biopsie',
+  FCV_PAP: 'FCV / Pap test',
+  CYT0PONCTION: 'Cytoponction',
+  LIQUIDE: 'Liquide',
+  EXTEMPORANE_STAT: 'Extemporané',
+  POS: 'POS',
+  POC: 'POC',
+};
 
 export interface AnapathSearchable {
   anapathId?: string;
@@ -12,7 +19,7 @@ export interface AnapathSearchable {
   createdAt?: string;
   prelevement?: { site?: string; description?: string } | null;
   resultat?: { conclusion?: string; details?: string } | null;
-  etapes?: SearchableEtape[] | null;
+  patientInfo?: { nomComplet?: string | null; nom?: string | null; prenom?: string | null } | null;
 }
 
 function collectSearchableText(req: AnapathSearchable): string {
@@ -20,15 +27,17 @@ function collectSearchableText(req: AnapathSearchable): string {
     req.anapathId,
     req.patientId,
     req.typeExamen,
+    TYPE_LABELS[req.typeExamen ?? ''],
     req.statut,
+    statusLabels[req.statut ?? ''],
     req.validatedByUserId,
     req.prelevement?.site,
     req.prelevement?.description,
     req.resultat?.conclusion,
     req.resultat?.details,
-    // Les observations dictées par le pathologiste et le matériel saisi par étape
-    // doivent être trouvables depuis la recherche, au même titre que les autres champs.
-    ...(req.etapes ?? []).flatMap((e) => [e.observations, ...(e.materiels ?? []).map((m) => m.nom)]),
+    req.patientInfo?.nomComplet,
+    req.patientInfo?.nom,
+    req.patientInfo?.prenom,
   ];
   return parts.filter(Boolean).join(' ').toLowerCase();
 }

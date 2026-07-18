@@ -1,18 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
 import UrgenceStatsCards from '@/components/UrgenceStatsCards';
 import LocalSearchBox from '@/components/LocalSearchBox';
 import FilterButton from '@/components/FilterButton';
+import PrescriptionDetails from '@/components/PrescriptionDetails';
+import PatientHistoriqueButton, { type HistoriqueEntry } from '@/components/PatientHistoriqueButton';
+import { PatientInfo } from '@/components/PatientIdentitySection';
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
-import { API_BASE } from '@/lib/api';
+import { API_BASE, getPatientForExamen } from '@/lib/api';
 import { filterAndSortAnapathRequests, matchesAnapathSearch } from '@/lib/searchAnapath';
-import { formatDate } from '@/lib/dateFormat';
-import type { EtapeWorkflow } from '@/lib/workflowSteps';
+import { formatDateTime, formatRelativeTime, formatDateLong } from '@/lib/dateFormat';
 
 interface AnapathRequest {
   id: string;
@@ -24,10 +25,14 @@ interface AnapathRequest {
   validatedAt: string | null;
   validatedByUserId: string | null;
   resultat: { conclusion: string; details: string } | null;
+  prelevement?: {
+    site?: string;
+    description?: string;
+    clinicalData?: { treatmentType?: string; suspicion?: string; clinicalNotes?: string };
+  } | null;
   metadata?: Record<string, unknown> | null;
   isExtemporane?: boolean;
-  etapes?: EtapeWorkflow[] | null;
-  patientInfo?: { nomComplet?: string | null; nom?: string | null; prenom?: string | null } | null;
+  patientInfo?: PatientInfo | null;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -45,7 +50,7 @@ function toggleValue<T>(arr: T[], v: T): T[] {
 }
 
 /** Nom affichable du patient : nom complet enrichi (Accueil), sinon nom+prénom, sinon tiret. */
-function patientDisplayName(req: { patientInfo?: { nomComplet?: string | null; nom?: string | null; prenom?: string | null } | null }): string {
+function patientDisplayName(req: { patientInfo?: PatientInfo | null }): string {
   const info = req.patientInfo;
   const complet = info?.nomComplet?.trim();
   if (complet) return complet;
@@ -60,6 +65,12 @@ export default function ArchivesPage() {
   const [requests, setRequests] = useState<AnapathRequest[]>([]);
   const [filteredRequests, setFilteredRequests] = useState<AnapathRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedRequest, setSelectedRequest] = useState<AnapathRequest | null>(null);
+  const [modalPatient, setModalPatient] = useState<PatientInfo | null>(null);
+  const [modalPatientLoading, setModalPatientLoading] = useState(false);
+  const [exportingModal, setExportingModal] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [patientHistorique, setPatientHistorique] = useState<HistoriqueEntry[]>([]);
 
   useEffect(() => {
     fetchData();
@@ -71,6 +82,34 @@ export default function ArchivesPage() {
     if (localQuery.trim()) filtered = filtered.filter((req) => matchesAnapathSearch(req, localQuery));
     setFilteredRequests(filterAndSortAnapathRequests(filtered, searchQuery));
   }, [searchQuery, localQuery, filterTypes, requests]);
+
+  useEffect(() => {
+    if (!selectedRequest?.id) return;
+    setModalPatientLoading(true);
+    if (selectedRequest.patientInfo?.nomComplet) {
+      setModalPatient(selectedRequest.patientInfo);
+      setModalPatientLoading(false);
+      return;
+    }
+    getPatientForExamen(selectedRequest.id)
+      .then((p) => setModalPatient(p))
+      .catch(() => setModalPatient(null))
+      .finally(() => setModalPatientLoading(false));
+  }, [selectedRequest?.id, selectedRequest?.patientInfo]);
+
+  // La liste locale ne contient que les examens VALIDE : on va chercher
+  // l'historique complet du patient (tous statuts) côté serveur.
+  useEffect(() => {
+    if (!selectedRequest?.patientId) {
+      setPatientHistorique([]);
+      return;
+    }
+    axios.get(`${API_BASE}/anapath`, { params: { patientId: selectedRequest.patientId } })
+      .then((res) => setPatientHistorique(
+        (res.data as AnapathRequest[]).filter((r) => r.id !== selectedRequest.id),
+      ))
+      .catch(() => setPatientHistorique([]));
+  }, [selectedRequest?.patientId, selectedRequest?.id]);
 
   const fetchData = async () => {
     try {
@@ -86,30 +125,48 @@ export default function ArchivesPage() {
     }
   };
 
-  const getTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      'BIOPSIE': 'Biopsie',
-      'FCV_PAP': 'FCV / Pap test',
-      'CYT0PONCTION': 'Cytoponction',
-      'LIQUIDE': 'Liquide',
-      'EXTEMPORANE_STAT': 'Extemporané',
-      'POS': 'POS',
-      'POC': 'POC',
-    };
-    return labels[type] || type;
-  };
+  const getTypeLabel = (type: string) => TYPE_LABELS[type] || type;
 
   const getTypeBadge = (type: string) => {
     const colors: Record<string, string> = {
-      'BIOPSIE': 'bg-blue-100 text-blue-700',
-      'FCV_PAP': 'bg-purple-100 text-purple-700',
-      'CYT0PONCTION': 'bg-green-100 text-green-700',
-      'LIQUIDE': 'bg-yellow-100 text-yellow-700',
-      'EXTEMPORANE_STAT': 'bg-red-100 text-red-700',
-      'POS': 'bg-indigo-100 text-indigo-700',
-      'POC': 'bg-pink-100 text-pink-700',
+      BIOPSIE: 'bg-blue-100 text-blue-700',
+      FCV_PAP: 'bg-purple-100 text-purple-700',
+      CYT0PONCTION: 'bg-green-100 text-green-700',
+      LIQUIDE: 'bg-yellow-100 text-yellow-700',
+      EXTEMPORANE_STAT: 'bg-red-100 text-red-700',
+      POS: 'bg-indigo-100 text-indigo-700',
+      POC: 'bg-pink-100 text-pink-700',
     };
     return colors[type] || 'bg-gray-100 text-gray-700';
+  };
+
+  const handleDownloadPDF = async (req: AnapathRequest, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDownloadingId(req.id);
+    try {
+      const patient = req.patientInfo?.nomComplet ? req.patientInfo : await getPatientForExamen(req.id);
+      const { generatePDF } = await import('@/lib/generatePDF');
+      await generatePDF(req, patient);
+    } catch (error) {
+      console.error('Erreur PDF:', error);
+      alert('Erreur lors de la génération du PDF');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const handleExportModalPDF = async () => {
+    if (!selectedRequest) return;
+    setExportingModal(true);
+    try {
+      const { generatePDF } = await import('@/lib/generatePDF');
+      await generatePDF(selectedRequest, modalPatient);
+    } catch (error) {
+      console.error('Erreur PDF:', error);
+      alert('Erreur lors de la génération du PDF');
+    } finally {
+      setExportingModal(false);
+    }
   };
 
   if (loading) {
@@ -174,7 +231,6 @@ export default function ArchivesPage() {
               <table className="w-full text-sm">
                 <thead className="bg-[#f2f3fb] text-[11px] font-bold text-slate-500 uppercase">
                   <tr>
-                    <th className="p-4 text-left">ID Patient</th>
                     <th className="p-4 text-left">Patient</th>
                     <th className="p-4 text-left">Type examen</th>
                     <th className="p-4 text-left">Diagnostic</th>
@@ -185,8 +241,11 @@ export default function ArchivesPage() {
                 </thead>
                 <tbody className="divide-y divide-outline-variant/10">
                   {filteredRequests.map((req) => (
-                    <tr key={req.id} className="hover:bg-slate-50/80 transition-colors group">
-                      <td className="p-4 font-mono text-xs text-slate-500">{req.patientId}</td>
+                    <tr
+                      key={req.id}
+                      onClick={() => setSelectedRequest(req)}
+                      className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
+                    >
                       <td className="p-4 font-medium">{patientDisplayName(req)}</td>
                       <td className="p-4">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${getTypeBadge(req.typeExamen)}`}>
@@ -196,16 +255,25 @@ export default function ArchivesPage() {
                       <td className="p-4 max-w-xs truncate text-slate-600">{req.resultat?.conclusion || '-'}</td>
                       <td className="p-4 text-slate-500 text-xs">{req.validatedByUserId || '-'}</td>
                       <td className="p-4 text-slate-500 text-xs">
-                        {req.validatedAt ? formatDate(req.validatedAt) : '-'}
+                        {req.validatedAt ? (
+                          <>
+                            <div>{formatDateTime(req.validatedAt)}</div>
+                            <div className="text-[10px] text-slate-400">{formatRelativeTime(req.validatedAt)}</div>
+                          </>
+                        ) : '-'}
                       </td>
                       <td className="p-4 text-center">
-                        <Link
-                          href={`/archives/${req.id}`}
-                          className="p-2 text-slate-400 hover:text-primary transition-colors inline-block"
-                          title="Voir le résultat"
+                        <button
+                          type="button"
+                          onClick={(e) => handleDownloadPDF(req, e)}
+                          disabled={downloadingId === req.id}
+                          title="Télécharger le PDF"
+                          className="p-2 text-slate-400 hover:text-primary transition-colors inline-block disabled:opacity-50"
                         >
-                          <span className="material-symbols-outlined text-base">visibility</span>
-                        </Link>
+                          <span className="material-symbols-outlined text-base">
+                            {downloadingId === req.id ? 'progress_activity' : 'download'}
+                          </span>
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -221,6 +289,78 @@ export default function ArchivesPage() {
           </div>
         </div>
       </main>
+
+      {selectedRequest && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setSelectedRequest(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-6xl w-[95vw] max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-outline-variant/20 sticky top-0 bg-white z-10">
+              <h3 className="font-bold text-lg">Détails de l'examen</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedRequest(null)}
+                className="text-slate-400 hover:text-slate-600"
+                aria-label="Fermer"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-5">
+              <PrescriptionDetails
+                request={selectedRequest}
+                patient={modalPatient}
+                patientLoading={modalPatientLoading}
+                historiqueButton={<PatientHistoriqueButton entries={patientHistorique} />}
+              />
+
+              <div className="bg-green-50 border border-green-100 rounded-lg p-4 mt-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="material-symbols-outlined text-green-700">verified</span>
+                  <h4 className="font-bold text-green-800">Résultat d'examen</h4>
+                </div>
+                <div className="mb-3">
+                  <p className="text-xs text-slate-500">Conclusion</p>
+                  <p className="font-medium text-on-surface">{selectedRequest.resultat?.conclusion || '—'}</p>
+                </div>
+                <div className="mb-3">
+                  <p className="text-xs text-slate-500">Détails</p>
+                  <p className="font-medium text-on-surface whitespace-pre-wrap">{selectedRequest.resultat?.details || '—'}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-slate-500">Validé par</p>
+                    <p className="font-medium text-on-surface">{selectedRequest.validatedByUserId || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Date de validation</p>
+                    <p className="font-medium text-on-surface">
+                      {selectedRequest.validatedAt ? formatDateLong(selectedRequest.validatedAt) : '—'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-center mt-6">
+                <button
+                  onClick={handleExportModalPDF}
+                  disabled={exportingModal}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-blue-700 text-white rounded-full hover:bg-blue-800 transition-colors font-semibold disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-base">
+                    {exportingModal ? 'progress_activity' : 'picture_as_pdf'}
+                  </span>
+                  {exportingModal ? 'Génération...' : 'Exporter PDF'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

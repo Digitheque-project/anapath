@@ -1,5 +1,7 @@
 'use client';
 
+import PatientAvatar from './PatientAvatar';
+
 export interface PatientInfo {
   nomComplet?: string;
   nom?: string;
@@ -23,6 +25,7 @@ interface PatientIdentitySectionProps {
   loading?: boolean;
   title?: string;
   className?: string;
+  historiqueButton?: React.ReactNode;
 }
 
 function SkeletonField() {
@@ -58,6 +61,7 @@ export default function PatientIdentitySection({
   loading = false,
   title = 'Identité Patient',
   className = '',
+  historiqueButton,
 }: PatientIdentitySectionProps) {
   const nomComplet = patient?.nomComplet
     || patient?.nom
@@ -76,13 +80,15 @@ export default function PatientIdentitySection({
 
   return (
     <div className={className}>
-      <div className="flex items-center gap-2 mb-3">
-        <span className="material-symbols-outlined text-primary text-sm">person</span>
-        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{title}</label>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2">
+          <PatientAvatar nom={patient?.nom} prenom={patient?.prenom} size="sm" />
+          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{title}</label>
+        </div>
+        {historiqueButton}
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
         <Field label="Nom complet" value={nomComplet} loading={loading} bold />
-        <Field label="Patient ID" value={examen?.patientId ?? '—'} loading={loading && !examen} />
         <Field label="Âge" value={ageDisplay} loading={loading} />
         <Field label="Sexe" value={sexeDisplay} loading={loading} />
         <Field label="Date de naissance" value={dateNaissance} loading={loading} />

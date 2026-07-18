@@ -17,3 +17,15 @@ export function formatDateLong(date: string | Date): string {
     hour12: false,
   });
 }
+
+/** Temps écoulé depuis une date, en français (ex: "à l'instant", "il y a 5 min", "il y a 2 j"). */
+export function formatRelativeTime(date: string | Date): string {
+  const diffMs = Date.now() - new Date(date).getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "à l'instant";
+  if (diffMin < 60) return `il y a ${diffMin} min`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `il y a ${diffH} h`;
+  const diffJ = Math.floor(diffH / 24);
+  return `il y a ${diffJ} j`;
+}

@@ -3,12 +3,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AnapathService } from './anapath.service';
 import { AnapathController } from './anapath.controller';
 import { AnapathRequest } from './entities/anapath-request.entity';
+import { ReportSettings } from './entities/report-settings.entity';
 import { ChuClient } from '../common/clients/chu.client';
 import { NotificationClient } from '../common/clients/notification.client';
 import { AccueilClient } from '../common/clients/accueil.client';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([AnapathRequest])],
+  imports: [TypeOrmModule.forFeature([AnapathRequest, ReportSettings])],
   controllers: [AnapathController],
   providers: [AnapathService, NotificationClient, ChuClient, AccueilClient],
   exports: [AnapathService],

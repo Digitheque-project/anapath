@@ -2,13 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
+import PrescriptionDetails from '@/components/PrescriptionDetails';
+import PatientHistoriqueButton from '@/components/PatientHistoriqueButton';
+import { PatientInfo } from '@/components/PatientIdentitySection';
 import { useSearch } from '@/components/SearchContext';
 import axios from 'axios';
-import { API_BASE } from '@/lib/api';
+import { API_BASE, getPatientForExamen } from '@/lib/api';
 import { filterAndSortAnapathRequests } from '@/lib/searchAnapath';
-import { formatDate } from '@/lib/dateFormat';
+import { formatDateTime, formatDateLong, formatRelativeTime } from '@/lib/dateFormat';
 import { statusLabels, statusColors } from '@/lib/statusLabels';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -20,14 +24,22 @@ interface AnapathRequest {
   statut: string;
   createdAt: string;
   isExtemporane?: boolean;
-  prelevement?: { site?: string; description?: string } | null;
+  prelevement?: {
+    site?: string;
+    description?: string;
+    clinicalData?: { treatmentType?: string; suspicion?: string; clinicalNotes?: string };
+  } | null;
   resultat?: { conclusion?: string; details?: string } | null;
   validatedByUserId?: string | null;
-  patientInfo?: { nomComplet?: string | null; nom?: string | null; prenom?: string | null } | null;
+  validatedAt?: string | null;
+  metadata?: Record<string, unknown> | null;
+  patientInfo?: PatientInfo | null;
 }
 
+const STATUTS_TERMINES = ['VALIDE', 'ARCHIVE'];
+
 /** Nom affichable du patient : nom complet enrichi (Accueil), sinon nom+prénom, sinon tiret. */
-function patientDisplayName(req: { patientInfo?: { nomComplet?: string | null; nom?: string | null; prenom?: string | null } | null }): string {
+function patientDisplayName(req: { patientInfo?: PatientInfo | null }): string {
   const info = req.patientInfo;
   const complet = info?.nomComplet?.trim();
   if (complet) return complet;
@@ -36,10 +48,14 @@ function patientDisplayName(req: { patientInfo?: { nomComplet?: string | null; n
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { searchQuery } = useSearch();
   const [requests, setRequests] = useState<AnapathRequest[]>([]);
   const [filteredRequests, setFilteredRequests] = useState<AnapathRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedRequest, setSelectedRequest] = useState<AnapathRequest | null>(null);
+  const [modalPatient, setModalPatient] = useState<PatientInfo | null>(null);
+  const [modalPatientLoading, setModalPatientLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -48,6 +64,20 @@ export default function DashboardPage() {
   useEffect(() => {
     setFilteredRequests(filterAndSortAnapathRequests(requests, searchQuery));
   }, [searchQuery, requests]);
+
+  useEffect(() => {
+    if (!selectedRequest?.id) return;
+    setModalPatientLoading(true);
+    if (selectedRequest.patientInfo?.nomComplet) {
+      setModalPatient(selectedRequest.patientInfo);
+      setModalPatientLoading(false);
+      return;
+    }
+    getPatientForExamen(selectedRequest.id)
+      .then((p) => setModalPatient(p))
+      .catch(() => setModalPatient(null))
+      .finally(() => setModalPatientLoading(false));
+  }, [selectedRequest?.id, selectedRequest?.patientInfo]);
 
   const fetchData = async () => {
     try {
@@ -88,6 +118,10 @@ export default function DashboardPage() {
     return labels[type] || type;
   };
 
+  const handleSaisirResultat = (id: string) => {
+    router.push(`/validation?id=${id}`);
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen bg-transparent">
@@ -98,6 +132,8 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  const isTerminee = (statut: string) => STATUTS_TERMINES.includes(statut);
 
   return (
     <div className="flex min-h-screen bg-transparent text-[#191c21]">
@@ -172,23 +208,29 @@ export default function DashboardPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-[#f2f3fb] text-[11px] font-bold text-slate-500 uppercase">
-                    <tr><th className="p-4 text-left">ID Patient</th><th className="p-4 text-left">Patient</th><th className="p-4 text-left">Type examen</th><th className="p-4 text-left">Statut</th><th className="p-4 text-left">Date</th></tr>
+                    <tr><th className="p-4 text-left">Patient</th><th className="p-4 text-left">Type examen</th><th className="p-4 text-left">Statut</th><th className="p-4 text-left">Date</th></tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant/10">
                     {filteredRequests.slice(0, 10).map((req) => (
-                      <tr key={req.id} className={`hover:bg-slate-50/80 transition-colors ${req.isExtemporane ? 'bg-red-50' : ''}`}>
-                        <td className="p-4 font-mono text-xs text-slate-500">{req.patientId}</td>
+                      <tr
+                        key={req.id}
+                        onClick={() => setSelectedRequest(req)}
+                        className={`hover:bg-slate-50/80 transition-colors cursor-pointer ${req.isExtemporane && !isTerminee(req.statut) ? 'bg-red-50' : ''}`}
+                      >
                         <td className="p-4 font-medium">{patientDisplayName(req)}</td>
                         <td className="p-4">
                           <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold inline-flex items-center gap-1">
                             {getTypeLabel(req.typeExamen)}
-                            {req.isExtemporane && (
-                              <span className="px-1 py-px rounded-full bg-red-600 text-white text-[7px] leading-normal font-bold stat-pulse">STAT</span>
+                            {req.isExtemporane && !isTerminee(req.statut) && (
+                              <span className="px-1 py-px rounded-full bg-red-600 text-white text-[7px] leading-normal font-bold stat-pulse">TRES URGENT</span>
                             )}
                           </span>
                         </td>
                         <td className="p-4"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${statusColors[req.statut] || 'bg-gray-100 text-gray-700'}`}>{statusLabels[req.statut] || req.statut}</span></td>
-                        <td className="p-4 text-slate-500 text-xs">{formatDate(req.createdAt)}</td>
+                        <td className="p-4 text-slate-500 text-xs">
+                          <div>{formatDateTime(req.createdAt)}</div>
+                          <div className="text-[10px] text-slate-400">{formatRelativeTime(req.createdAt)}</div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -242,6 +284,92 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      {selectedRequest && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setSelectedRequest(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-6xl w-[95vw] max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-outline-variant/20 sticky top-0 bg-white z-10">
+              <h3 className="font-bold text-lg">
+                {isTerminee(selectedRequest.statut) ? "Détails de l'examen" : 'Détail de la prescription'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSelectedRequest(null)}
+                className="text-slate-400 hover:text-slate-600"
+                aria-label="Fermer"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-5">
+              <PrescriptionDetails
+                request={selectedRequest}
+                patient={modalPatient}
+                patientLoading={modalPatientLoading}
+                historiqueButton={
+                  <PatientHistoriqueButton
+                    entries={requests.filter((r) => r.patientId === selectedRequest.patientId && r.id !== selectedRequest.id)}
+                  />
+                }
+              />
+
+              {isTerminee(selectedRequest.statut) ? (
+                <div className="bg-green-50 border border-green-100 rounded-lg p-4 mt-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-green-700">verified</span>
+                    <h4 className="font-bold text-green-800">Résultat d'examen</h4>
+                  </div>
+                  <div className="mb-3">
+                    <p className="text-xs text-slate-500">Conclusion</p>
+                    <p className="font-medium text-on-surface">{selectedRequest.resultat?.conclusion || '—'}</p>
+                  </div>
+                  <div className="mb-3">
+                    <p className="text-xs text-slate-500">Détails</p>
+                    <p className="font-medium text-on-surface whitespace-pre-wrap">{selectedRequest.resultat?.details || '—'}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-slate-500">Validé par</p>
+                      <p className="font-medium text-on-surface">{selectedRequest.validatedByUserId || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Date de validation</p>
+                      <p className="font-medium text-on-surface">
+                        {selectedRequest.validatedAt ? formatDateLong(selectedRequest.validatedAt) : '—'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex justify-center mt-4">
+                    <Link
+                      href={`/archives/${selectedRequest.id}`}
+                      className="px-6 py-2 bg-green-700 text-white font-semibold rounded-full shadow-sm hover:opacity-90 transition-colors flex items-center gap-2"
+                    >
+                      <span className="material-symbols-outlined text-base">description</span>
+                      Voir le compte-rendu complet
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-center mt-6">
+                  <button
+                    onClick={() => handleSaisirResultat(selectedRequest.id)}
+                    className="px-8 py-3 bg-green-600 text-white font-bold rounded-full shadow-md hover:bg-green-700 transition-colors flex items-center gap-2"
+                  >
+                    <span className="material-symbols-outlined">edit_note</span>
+                    Saisir le résultat d'examen
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

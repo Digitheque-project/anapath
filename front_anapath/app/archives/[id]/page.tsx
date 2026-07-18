@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import PatientIdentitySection, { PatientInfo } from '@/components/PatientIdentitySection';
+import PatientAvatar from '@/components/PatientAvatar';
 import axios from 'axios';
 import { formatDateLong, formatDateTime } from '@/lib/dateFormat';
 import { getPatientForExamen, API_BASE } from '@/lib/api';
@@ -140,9 +141,7 @@ export default function ArchiveDetailPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#00478d]/10 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[#00478d] text-sm">person</span>
-            </div>
+            <PatientAvatar nom={patient?.nom} prenom={patient?.prenom} />
           </div>
         </header>
 

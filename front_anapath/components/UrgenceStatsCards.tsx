@@ -14,9 +14,9 @@ export default function UrgenceStatsCards({ requests }: { requests: UrgenceAware
   const normal = requests.filter((r) => getUrgenceLevel(r) === 'NORMALE').length;
 
   const subCards = [
-    { label: 'Stat', value: stat, icon: 'emergency', color: 'text-red-600', bg: 'bg-red-50' },
-    { label: 'Urgent', value: urgent, icon: 'priority_high', color: 'text-orange-500', bg: 'bg-orange-50' },
-    { label: 'Normal', value: normal, icon: 'task_alt', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: 'TRES URGENT', value: stat, icon: 'emergency', color: 'text-red-600', bg: 'bg-red-50' },
+    { label: 'URGENT', value: urgent, icon: 'priority_high', color: 'text-orange-500', bg: 'bg-orange-50' },
+    { label: 'Normal', value: normal, icon: 'task_alt', color: 'text-blue-600', bg: 'bg-blue-50' },
   ];
 
   return (

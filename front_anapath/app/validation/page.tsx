@@ -1,16 +1,19 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
 import PatientIdentitySection, { PatientInfo } from '@/components/PatientIdentitySection';
+import PatientHistoriqueButton, { type HistoriqueEntry } from '@/components/PatientHistoriqueButton';
+import VoiceInputButton from '@/components/VoiceInputButton';
+import ExamenSpeculumForm from '@/components/ExamenSpeculumForm';
 import { useSearch } from '@/components/SearchContext';
+import { useAuth } from '@/components/AuthProvider';
 import axios from 'axios';
 import { formatDateLong } from '@/lib/dateFormat';
 import { getPatientForExamen, marquerNotifLue, API_BASE } from '@/lib/api';
 import { getTypeLabel } from '@/lib/generatePDF';
-import { allEtapesComplete, type EtapeWorkflow } from '@/lib/workflowSteps';
 import { sortByUrgencyThenArrival } from '@/lib/urgencySort';
 
 interface AnapathRequest {
@@ -34,7 +37,16 @@ interface AnapathRequest {
   episodeId?: string | null;
   metadata?: Record<string, unknown> | null;
   patientInfo?: PatientInfo | null;
-  etapes?: EtapeWorkflow[] | null;
+  examenSpeculum?: Record<string, unknown> | null;
+}
+
+/** Nom affichable du patient : nom complet enrichi (Accueil), sinon nom+prénom, sinon tiret. */
+function patientDisplayName(req: { patientInfo?: PatientInfo | null }): string {
+  const info = req.patientInfo;
+  const complet = info?.nomComplet?.trim();
+  if (complet) return complet;
+  const assemble = [info?.nom, info?.prenom].filter(Boolean).join(' ').trim();
+  return assemble || '—';
 }
 
 function ValidationPageContent() {
@@ -42,6 +54,8 @@ function ValidationPageContent() {
   const preselectedId = searchParams.get('id');
 
   const { searchQuery } = useSearch();
+  const { hasPermission } = useAuth();
+  const canValidate = hasPermission('anapath:update');
   const [requests, setRequests] = useState<AnapathRequest[]>([]);
   const [filteredRequests, setFilteredRequests] = useState<AnapathRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<AnapathRequest | null>(null);
@@ -53,9 +67,19 @@ function ValidationPageContent() {
   const [resultData, setResultData] = useState({ details: '', conclusion: '' });
   const [signature, setSignature] = useState({ signature: '', ordreProfessionnelNumber: '' });
   const [ippNumber, setIppNumber] = useState('');
-  const [treatmentType, setTreatmentType] = useState('');
-  const [suspicion, setSuspicion] = useState('');
-  const [clinicalNotes, setClinicalNotes] = useState('');
+  const [autoSaveState, setAutoSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [noteText, setNoteText] = useState('');
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [showSpeculumModal, setShowSpeculumModal] = useState(false);
+  const [patientHistorique, setPatientHistorique] = useState<HistoriqueEntry[]>([]);
+
+  // FCV/Pap test : l'examen au spéculum doit être soumis avant de pouvoir
+  // saisir le résultat.
+  const needsSpeculum =
+    selectedRequest?.typeExamen === 'FCV_PAP' && !selectedRequest?.examenSpeculum;
+  // Évite qu'un changement programmatique de résultData (populateFields, à la
+  // sélection d'une nouvelle demande) ne déclenche une sauvegarde automatique.
+  const skipAutosaveRef = useRef(true);
 
   useEffect(() => {
     if (!selectedRequest?.id) return;
@@ -71,9 +95,67 @@ function ValidationPageContent() {
       .finally(() => setPatientLoading(false));
   }, [selectedRequest?.id, selectedRequest?.patientInfo]);
 
+  // La liste locale (readyForValidation) exclut les examens déjà validés :
+  // on va chercher l'historique complet du patient (tous statuts) côté serveur.
+  useEffect(() => {
+    if (!selectedRequest?.patientId) {
+      setPatientHistorique([]);
+      return;
+    }
+    axios.get(`${API_BASE}/anapath`, { params: { patientId: selectedRequest.patientId } })
+      .then((res) => setPatientHistorique(
+        (res.data as AnapathRequest[]).filter((r) => r.id !== selectedRequest.id),
+      ))
+      .catch(() => setPatientHistorique([]));
+  }, [selectedRequest?.patientId, selectedRequest?.id]);
+
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Une nouvelle demande vient d'être chargée : ne pas déclencher l'autosave
+  // sur les valeurs qu'on vient de repeupler nous-mêmes.
+  useEffect(() => {
+    skipAutosaveRef.current = true;
+  }, [selectedRequest?.id]);
+
+  // La note (brouillon) est un scratch-pad local à l'appareil, propre à
+  // chaque demande — pas la donnée officielle, juste de quoi préparer le
+  // résultat avant de le saisir (ou l'y importer).
+  useEffect(() => {
+    if (!selectedRequest?.id) {
+      setNoteText('');
+      return;
+    }
+    setNoteText(localStorage.getItem(`anapath_note_${selectedRequest.id}`) ?? '');
+  }, [selectedRequest?.id]);
+
+  const updateNoteText = (text: string) => {
+    setNoteText(text);
+    if (selectedRequest) localStorage.setItem(`anapath_note_${selectedRequest.id}`, text);
+  };
+
+  const handleImportNoteToResultat = () => {
+    setResultData((prev) => ({
+      ...prev,
+      details: prev.details.trim() ? `${prev.details}\n\n${noteText}` : noteText,
+    }));
+  };
+
+  // Sauvegarde automatique du résultat et de la conclusion, avec un léger
+  // délai après la dernière frappe — pour ne rien perdre en cas de coupure.
+  useEffect(() => {
+    if (!selectedRequest) return;
+    if (skipAutosaveRef.current) {
+      skipAutosaveRef.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      autoSaveResult();
+    }, 1200);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultData.details, resultData.conclusion]);
 
   useEffect(() => {
     let filtered = requests;
@@ -117,25 +199,17 @@ function ValidationPageContent() {
     } else {
       setResultData({ details: '', conclusion: '' });
     }
-
-    const clinicalData = request.prelevement?.clinicalData || {};
-    setTreatmentType(clinicalData.treatmentType || '');
-    setSuspicion(clinicalData.suspicion || '');
-    setClinicalNotes(clinicalData.clinicalNotes || '');
   };
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${API_BASE}/anapath`);
-      // Seules les demandes dont les 6 étapes du workflow sont terminées peuvent
-      // passer à la saisie du résultat (voir fil de travail / WorkflowStepsCard).
       const readyForValidation: AnapathRequest[] = response.data.filter(
         (req: AnapathRequest) =>
-          (req.statut === 'CREEE' ||
-            req.statut === 'EN_ATTENTE' ||
-            req.statut === 'RESULTAT_DISPONIBLE') &&
-          allEtapesComplete(req.etapes),
+          req.statut === 'CREEE' ||
+          req.statut === 'EN_ATTENTE' ||
+          req.statut === 'RESULTAT_DISPONIBLE',
       );
       const pendingRequests = sortByUrgencyThenArrival<AnapathRequest>(readyForValidation);
       setRequests(pendingRequests);
@@ -181,11 +255,9 @@ function ValidationPageContent() {
     const prelevementData = {
       site: selectedRequest.prelevement?.site || '',
       description: selectedRequest.prelevement?.description || '',
-      clinicalData: {
-        treatmentType: treatmentType || '',
-        suspicion: suspicion || '',
-        clinicalNotes: clinicalNotes || '',
-      },
+      // Renseignés par le service Prescription, non modifiables depuis la Validation :
+      // on les renvoie tels quels pour ne pas les écraser (le PATCH remplace tout l'objet prelevement).
+      clinicalData: selectedRequest.prelevement?.clinicalData || {},
     };
 
     try {
@@ -211,6 +283,25 @@ function ValidationPageContent() {
       alert('Erreur lors de la sauvegarde');
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const autoSaveResult = async () => {
+    if (!selectedRequest) return;
+
+    try {
+      setAutoSaveState('saving');
+      // Route dédiée (anapath:observation:write) : ne touche qu'au résultat/
+      // conclusion, pas au statut de validation finale ni au prélèvement —
+      // accessible à la Secrétaire pour la transcription en direct.
+      await axios.patch(`${API_BASE}/anapath/${selectedRequest.id}/resultat`, {
+        resultatDetails: resultData.details,
+        resultatConclusion: resultData.conclusion,
+      });
+      setAutoSaveState('saved');
+    } catch (error) {
+      console.error('Erreur auto-save:', error);
+      setAutoSaveState('error');
     }
   };
 
@@ -269,9 +360,6 @@ function ValidationPageContent() {
         setResultData({ details: '', conclusion: '' });
         setSignature({ signature: '', ordreProfessionnelNumber: '' });
         setIppNumber('');
-        setTreatmentType('');
-        setSuspicion('');
-        setClinicalNotes('');
       }
     } catch (error) {
       console.error('Erreur:', error);
@@ -288,19 +376,6 @@ function ValidationPageContent() {
       ippNumber.trim() !== '' &&
       signature.signature.trim() !== '' &&
       signature.ordreProfessionnelNumber.trim() !== ''
-    );
-  };
-
-  const isSaveEnabled = () => {
-    return (
-      resultData.details.trim() !== '' ||
-      resultData.conclusion.trim() !== '' ||
-      ippNumber.trim() !== '' ||
-      signature.signature.trim() !== '' ||
-      signature.ordreProfessionnelNumber.trim() !== '' ||
-      treatmentType.trim() !== '' ||
-      suspicion.trim() !== '' ||
-      clinicalNotes.trim() !== ''
     );
   };
 
@@ -366,8 +441,8 @@ function ValidationPageContent() {
                 >
                   {filteredRequests.map((req: AnapathRequest) => (
                     <option key={req.id} value={req.id}>
-                      {req.anapathId} - Patient: {req.patientId} - {getTypeLabel(req.typeExamen)}
-                      {req.isExtemporane && ' STAT'}
+                      {req.anapathId} - {patientDisplayName(req)} - {getTypeLabel(req.typeExamen)}
+                      {req.isExtemporane && ' - TRES URGENT'}
                     </option>
                   ))}
                 </select>
@@ -404,6 +479,7 @@ function ValidationPageContent() {
                           examen={selectedRequest}
                           patient={patient}
                           loading={patientLoading}
+                          historiqueButton={<PatientHistoriqueButton entries={patientHistorique} />}
                         />
                         <div className="grid grid-cols-2 gap-y-3 gap-x-2 mt-4 pt-4 border-t border-outline-variant">
                           <div>
@@ -439,47 +515,91 @@ function ValidationPageContent() {
                       </div>
                       <hr className="border-outline-variant my-3" />
 
+                      {/* Renseignés par le service Prescription — lecture seule, cf. détails de prescription */}
                       <div className="mb-3">
-                        <p className="text-xs font-bold text-on-surface-variant">Type de traitement <span className="text-red-500">*</span></p>
-                        <input
-                          type="text"
-                          value={treatmentType}
-                          onChange={(e) => setTreatmentType(e.target.value)}
-                          className="w-full mt-1 p-2 border rounded-lg bg-surface-container-low border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-medium text-on-surface"
-                          placeholder="Ex: Chirurgie, Chimiothérapie, Radiothérapie..."
-                          required
-                        />
+                        <p className="text-xs text-on-surface-variant">Type de traitement</p>
+                        <p className="font-medium text-on-surface">
+                          {selectedRequest.prelevement?.clinicalData?.treatmentType || '—'}
+                        </p>
                       </div>
 
                       <div className="mb-3">
-                        <p className="text-xs font-bold text-on-surface-variant">Suspicion diagnostique <span className="text-red-500">*</span></p>
-                        <textarea
-                          value={suspicion}
-                          onChange={(e) => setSuspicion(e.target.value)}
-                          className="w-full mt-1 p-2 border rounded-lg bg-surface-container-low border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-medium text-on-surface italic leading-relaxed"
-                          placeholder="Adénopathie cervicale persistante, perte de poids inexpliquée..."
-                          rows={3}
-                          required
-                        />
+                        <p className="text-xs text-on-surface-variant">Suspicion diagnostique</p>
+                        <p className="font-medium text-on-surface italic leading-relaxed">
+                          {selectedRequest.prelevement?.clinicalData?.suspicion || '—'}
+                        </p>
                       </div>
 
                       <div>
-                        <p className="text-xs font-bold text-on-surface-variant">Renseignements cliniques <span className="text-red-500">*</span></p>
-                        <textarea
-                          value={clinicalNotes}
-                          onChange={(e) => setClinicalNotes(e.target.value)}
-                          className="w-full mt-1 p-2 border rounded-lg bg-surface-container-low border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-medium text-on-surface italic leading-relaxed"
-                          placeholder="Motif de la consultation, antécédents, examens complémentaires..."
-                          rows={3}
-                          required
-                        />
+                        <p className="text-xs text-on-surface-variant">Renseignements cliniques</p>
+                        <p className="font-medium text-on-surface italic leading-relaxed">
+                          {selectedRequest.prelevement?.clinicalData?.clinicalNotes || '—'}
+                        </p>
                       </div>
                     </section>
                   </div>
 
                   <div className="space-y-4">
+                    {needsSpeculum ? (
+                      <section className="bg-amber-50 border border-amber-200 rounded-xl shadow-sm p-6 text-center">
+                        <span className="material-symbols-outlined text-4xl text-amber-600">clinical_notes</span>
+                        <p className="font-bold text-amber-800 mt-2">Examen au spéculum requis</p>
+                        <p className="text-sm text-amber-700 mt-1">
+                          Pour un FCV / Pap test, l&apos;examen au spéculum doit être soumis avant de pouvoir saisir le résultat.
+                        </p>
+                        {canValidate ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowSpeculumModal(true)}
+                            className="mt-4 px-6 py-2.5 bg-amber-600 text-white rounded-full font-semibold text-sm hover:opacity-90 inline-flex items-center gap-2"
+                          >
+                            <span className="material-symbols-outlined text-base">clinical_notes</span>
+                            Remplir l&apos;examen spéculum
+                          </button>
+                        ) : (
+                          <p className="mt-4 text-xs text-amber-700 flex items-center justify-center gap-1.5">
+                            <span className="material-symbols-outlined text-sm">lock</span>
+                            Cette étape doit être complétée par un technicien, un pathologiste ou un chef de service.
+                          </p>
+                        )}
+                      </section>
+                    ) : (
+                      <>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowNoteModal(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-base">
+                          {noteText.trim() ? 'sticky_note_2' : 'note_add'}
+                        </span>
+                        {noteText.trim() ? 'Voir la note' : 'Prendre une note'}
+                      </button>
+                      {noteText.trim() && (
+                        <button
+                          type="button"
+                          onClick={handleImportNoteToResultat}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-base">move_down</span>
+                          Importer la note au résultat
+                        </button>
+                      )}
+                    </div>
+
                     <section className="bg-white border border-outline-variant rounded-xl shadow-sm p-4">
-                      <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">RÉSULTAT : <span className="text-red-500">*</span></p>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">RÉSULTAT : <span className="text-red-500">*</span></p>
+                        <VoiceInputButton
+                          onResult={(text) =>
+                            setResultData((prev) => ({
+                              ...prev,
+                              details: prev.details.trim() ? `${prev.details} ${text}` : text,
+                            }))
+                          }
+                        />
+                      </div>
                       <textarea
                         value={resultData.details}
                         onChange={(e) => setResultData({ ...resultData, details: e.target.value })}
@@ -491,7 +611,17 @@ function ValidationPageContent() {
                     </section>
 
                     <section className="bg-white border border-outline-variant rounded-xl shadow-sm p-4">
-                      <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">CONCLUSION : <span className="text-red-500">*</span></p>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">CONCLUSION : <span className="text-red-500">*</span></p>
+                        <VoiceInputButton
+                          onResult={(text) =>
+                            setResultData((prev) => ({
+                              ...prev,
+                              conclusion: prev.conclusion.trim() ? `${prev.conclusion} ${text}` : text,
+                            }))
+                          }
+                        />
+                      </div>
                       <textarea
                         value={resultData.conclusion}
                         onChange={(e) => setResultData({ ...resultData, conclusion: e.target.value })}
@@ -502,60 +632,78 @@ function ValidationPageContent() {
                       />
                     </section>
 
-                    <button
-                      onClick={handleSaveResult}
-                      disabled={!isSaveEnabled() || updating}
-                      className={`w-full flex items-center justify-center gap-2 px-5 py-2 rounded-full font-bold uppercase tracking-wider shadow-sm transition-all ${
-                        isSaveEnabled() && !updating
-                          ? 'bg-blue-600 text-white hover:opacity-90'
-                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[18px]">save</span>
-                      {updating ? 'Sauvegarde...' : 'Sauvegarder le résultat'}
-                    </button>
+                    <p className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
+                      {autoSaveState === 'saving' && (
+                        <>
+                          <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                          Enregistrement automatique...
+                        </>
+                      )}
+                      {autoSaveState === 'saved' && (
+                        <>
+                          <span className="material-symbols-outlined text-sm text-green-600">cloud_done</span>
+                          Enregistré automatiquement
+                        </>
+                      )}
+                      {autoSaveState === 'error' && (
+                        <>
+                          <span className="material-symbols-outlined text-sm text-red-500">cloud_off</span>
+                          Échec de l&apos;enregistrement automatique
+                        </>
+                      )}
+                      {autoSaveState === 'idle' && (
+                        <>
+                          <span className="material-symbols-outlined text-sm">cloud</span>
+                          Vos saisies sont enregistrées automatiquement
+                        </>
+                      )}
+                    </p>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                <section className="bg-white border border-outline-variant rounded-xl shadow-sm p-4 md:p-6 mt-4">
-                  <div className="text-center">
-                    <p className="text-xs text-on-surface-variant mb-4">
-                      Fait à Fianarantsoa, le {formatDateLong(new Date())}
-                    </p>
-
-                    <div className="mt-6 border-t border-outline-variant pt-4">
-                      <p className="text-sm font-bold text-on-surface-variant flex items-center justify-center gap-2">
-                        <span className="material-symbols-outlined text-primary">verified</span>
-                        Signature numérique
+                {canValidate && (
+                  <section className="bg-white border border-outline-variant rounded-xl shadow-sm p-4 md:p-6 mt-4">
+                    <div className="text-center">
+                      <p className="text-xs text-on-surface-variant mb-4">
+                        Fait à Fianarantsoa, le {formatDateLong(new Date())}
                       </p>
 
-                      <div className="mt-4 w-full max-w-sm mx-auto space-y-3">
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase">Signature électronique <span className="text-red-500">*</span></label>
-                          <input
-                            type="text"
-                            value={signature.signature}
-                            onChange={(e) => setSignature({ ...signature, signature: e.target.value })}
-                            className="w-full mt-1 p-2 bg-[#f2f3fb] border border-outline-variant/30 rounded-lg text-sm"
-                            placeholder="Signature électronique"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase">N° Ordre professionnel <span className="text-red-500">*</span></label>
-                          <input
-                            type="text"
-                            value={signature.ordreProfessionnelNumber}
-                            onChange={(e) => setSignature({ ...signature, ordreProfessionnelNumber: e.target.value })}
-                            className="w-full mt-1 p-2 bg-[#f2f3fb] border border-outline-variant/30 rounded-lg text-sm"
-                            placeholder="Ex: ONM-12345"
-                            required
-                          />
+                      <div className="mt-6 border-t border-outline-variant pt-4">
+                        <p className="text-sm font-bold text-on-surface-variant flex items-center justify-center gap-2">
+                          <span className="material-symbols-outlined text-primary">verified</span>
+                          Signature numérique
+                        </p>
+
+                        <div className="mt-4 w-full max-w-sm mx-auto space-y-3">
+                          <div>
+                            <label className="text-xs font-bold text-slate-400 uppercase">Signature électronique <span className="text-red-500">*</span></label>
+                            <input
+                              type="text"
+                              value={signature.signature}
+                              onChange={(e) => setSignature({ ...signature, signature: e.target.value })}
+                              className="w-full mt-1 p-2 bg-[#f2f3fb] border border-outline-variant/30 rounded-lg text-sm"
+                              placeholder="Signature électronique"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-bold text-slate-400 uppercase">N° Ordre professionnel <span className="text-red-500">*</span></label>
+                            <input
+                              type="text"
+                              value={signature.ordreProfessionnelNumber}
+                              onChange={(e) => setSignature({ ...signature, ordreProfessionnelNumber: e.target.value })}
+                              className="w-full mt-1 p-2 bg-[#f2f3fb] border border-outline-variant/30 rounded-lg text-sm"
+                              placeholder="Ex: ONM-12345"
+                              required
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </section>
+                  </section>
+                )}
 
                 <div className="flex flex-wrap gap-3 items-center justify-center pt-6 pb-4 border-t border-outline-variant">
                   <button
@@ -564,25 +712,90 @@ function ValidationPageContent() {
                   >
                     Exporter PDF
                   </button>
-                  <button
-                    onClick={handleValidate}
-                    disabled={!isFormValid() || updating}
-                    className={`flex items-center gap-2 px-5 h-10 rounded-full font-bold uppercase tracking-wider shadow-sm transition-all ${
-                      isFormValid() && !updating
-                        ? 'bg-green-700 text-white hover:opacity-90'
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[18px]">check_circle</span>
-                    {isFormValid() && !updating
-                      ? 'Valider le résultat'
-                      : 'Valider le résultat'}
-                  </button>
+                  {canValidate && (
+                    <button
+                      onClick={handleValidate}
+                      disabled={!isFormValid() || updating}
+                      className={`flex items-center gap-2 px-5 h-10 rounded-full font-bold uppercase tracking-wider shadow-sm transition-all ${
+                        isFormValid() && !updating
+                          ? 'bg-green-700 text-white hover:opacity-90'
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                      Valider le résultat
+                    </button>
+                  )}
                 </div>
               </>
             )}
           </div>
         </div>
+
+        {showNoteModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            onClick={() => setShowNoteModal(false)}
+          >
+            <div
+              className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[85vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b border-outline-variant/20">
+                <h3 className="font-bold text-lg">Note (brouillon)</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowNoteModal(false)}
+                  className="text-slate-400 hover:text-slate-600"
+                  aria-label="Fermer"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+              <div className="p-4 overflow-y-auto">
+                <div className="flex justify-end mb-2">
+                  <VoiceInputButton
+                    onResult={(text) => updateNoteText(noteText.trim() ? `${noteText} ${text}` : text)}
+                  />
+                </div>
+                <textarea
+                  value={noteText}
+                  onChange={(e) => updateNoteText(e.target.value)}
+                  rows={8}
+                  placeholder="Écrivez ou dictez votre brouillon ici..."
+                  className="w-full p-2 border rounded-lg bg-surface-container-low border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-medium text-on-surface"
+                />
+                <p className="flex items-center gap-1 text-[11px] text-slate-400 mt-1.5">
+                  <span className="material-symbols-outlined text-xs">cloud_done</span>
+                  Enregistré automatiquement sur cet appareil
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 p-4 border-t border-outline-variant/20">
+                <button
+                  type="button"
+                  onClick={() => setShowNoteModal(false)}
+                  className="px-6 py-2 bg-primary text-white rounded-full font-semibold text-sm hover:opacity-90"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showSpeculumModal && selectedRequest && (
+          <ExamenSpeculumForm
+            requestId={selectedRequest.id}
+            anapathId={selectedRequest.anapathId}
+            patientName={patientDisplayName(selectedRequest)}
+            initialData={selectedRequest.examenSpeculum}
+            onClose={() => setShowSpeculumModal(false)}
+            onSaved={async () => {
+              setShowSpeculumModal(false);
+              await loadRequest(selectedRequest.id);
+            }}
+          />
+        )}
       </main>
     </div>
   );

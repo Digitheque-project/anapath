@@ -1,11 +1,10 @@
-import { Controller, Get, Patch, Param, Post, Put, Body, HttpCode, Header, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Post, Put, Body, Query, HttpCode, Header, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
 import { AnapathService } from './anapath.service';
 import { UpdateAnapathDto } from './dto/update-anapath.dto';
 import { ValidateAnapathDto } from './dto/validate-anapath.dto';
-import { UpdateEtapeDto } from './dto/update-etape.dto';
-import { UpdateEtapesBulkDto } from './dto/update-etapes-bulk.dto';
-import { UpdateEtapesObservationsBulkDto } from './dto/update-etape-observation.dto';
+import { UpdateResultatDto } from './dto/update-resultat.dto';
+import { UpdateExamenSpeculumDto } from './dto/update-examen-speculum.dto';
 import { AnapathRequest, Statut } from './entities/anapath-request.entity';
 import { ChuClient } from '../common/clients/chu.client';
 import { AccueilClient } from '../common/clients/accueil.client';
@@ -36,11 +35,11 @@ export class AnapathController {
 
   @Permissions('anapath:read')
   @Get()
-  @ApiOperation({ summary: 'Lister toutes les demandes' })
+  @ApiOperation({ summary: 'Lister toutes les demandes (optionnellement filtrées par patientId)' })
   @ApiResponse({ status: 200, description: 'Liste des demandes', type: [AnapathRequest] })
   @Header('Content-Type', 'application/json; charset=utf-8')
-  findAll() {
-    return this.anapathService.findAll();
+  findAll(@Query('patientId') patientId?: string) {
+    return this.anapathService.findAll(patientId);
   }
 
   @Permissions('anapath:read')
@@ -66,6 +65,22 @@ export class AnapathController {
   @Header('Content-Type', 'application/json; charset=utf-8')
   getAnapathService() {
     return this.chuClient.getAnapathServiceInfo();
+  }
+
+  @Permissions('anapath:read')
+  @Get('report-settings')
+  @ApiOperation({ summary: 'Préférences des rapports (ex: envoi automatique hebdomadaire)' })
+  @Header('Content-Type', 'application/json; charset=utf-8')
+  getReportSettings() {
+    return this.anapathService.getReportSettings();
+  }
+
+  @Permissions('anapath:update')
+  @Patch('report-settings')
+  @ApiOperation({ summary: 'Activer/désactiver le rapport hebdomadaire automatique' })
+  @Header('Content-Type', 'application/json; charset=utf-8')
+  updateReportSettings(@Body() dto: { autoWeeklyReportEnabled: boolean }) {
+    return this.anapathService.updateReportSettings(dto.autoWeeklyReportEnabled);
   }
 
   @Permissions('anapath:read')
@@ -314,51 +329,28 @@ export class AnapathController {
     return this.anapathService.update(id, dto);
   }
 
-  @Permissions('anapath:update')
-  @Patch(':id/etapes')
-  @ApiOperation({ summary: "Marquer une étape du workflow (avant saisie du résultat)" })
-  @ApiParam({ name: 'id', description: 'UUID de la demande' })
-  @ApiBody({ type: UpdateEtapeDto })
-  @ApiResponse({ status: 200, description: 'Étape mise à jour', type: AnapathRequest })
-  @ApiResponse({ status: 404, description: 'Demande non trouvée' })
-  @Header('Content-Type', 'application/json; charset=utf-8')
-  updateEtape(
-    @Param('id') id: string,
-    @Body() dto: UpdateEtapeDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.anapathService.updateEtape(id, dto, user);
-  }
-
-  @Permissions('anapath:update')
-  @Patch(':id/etapes/bulk')
-  @ApiOperation({ summary: 'Mettre à jour toutes les étapes du workflow en une seule fois' })
-  @ApiParam({ name: 'id', description: 'UUID de la demande' })
-  @ApiBody({ type: UpdateEtapesBulkDto })
-  @ApiResponse({ status: 200, description: 'Étapes mises à jour', type: AnapathRequest })
-  @ApiResponse({ status: 404, description: 'Demande non trouvée' })
-  @Header('Content-Type', 'application/json; charset=utf-8')
-  updateEtapesBulk(
-    @Param('id') id: string,
-    @Body() dto: UpdateEtapesBulkDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.anapathService.updateEtapesBulk(id, dto.etapes, user);
-  }
-
   @Permissions('anapath:observation:write')
-  @Patch(':id/etapes/observations')
-  @ApiOperation({ summary: "Enregistrer les observations du pathologiste par étape" })
+  @Patch(':id/resultat')
+  @ApiOperation({ summary: "Enregistrer (auto-save) le résultat et la conclusion d'examen — transcription" })
   @ApiParam({ name: 'id', description: 'UUID de la demande' })
-  @ApiBody({ type: UpdateEtapesObservationsBulkDto })
-  @ApiResponse({ status: 200, description: 'Observations mises à jour', type: AnapathRequest })
+  @ApiBody({ type: UpdateResultatDto })
+  @ApiResponse({ status: 200, description: 'Résultat mis à jour', type: AnapathRequest })
   @ApiResponse({ status: 404, description: 'Demande non trouvée' })
   @Header('Content-Type', 'application/json; charset=utf-8')
-  updateEtapesObservations(
-    @Param('id') id: string,
-    @Body() dto: UpdateEtapesObservationsBulkDto,
-  ) {
-    return this.anapathService.updateEtapesObservations(id, dto.etapes);
+  updateResultat(@Param('id') id: string, @Body() dto: UpdateResultatDto) {
+    return this.anapathService.updateResultat(id, dto);
+  }
+
+  @Permissions('anapath:update')
+  @Patch(':id/examen-speculum')
+  @ApiOperation({ summary: "Enregistrer l'examen au spéculum (préalable au résultat pour un FCV/Pap test)" })
+  @ApiParam({ name: 'id', description: 'UUID de la demande' })
+  @ApiBody({ type: UpdateExamenSpeculumDto })
+  @ApiResponse({ status: 200, description: 'Examen spéculum enregistré', type: AnapathRequest })
+  @ApiResponse({ status: 404, description: 'Demande non trouvée' })
+  @Header('Content-Type', 'application/json; charset=utf-8')
+  updateExamenSpeculum(@Param('id') id: string, @Body() dto: UpdateExamenSpeculumDto) {
+    return this.anapathService.updateExamenSpeculum(id, dto);
   }
 
   @Permissions('anapath:validate')
